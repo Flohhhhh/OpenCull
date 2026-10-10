@@ -4,7 +4,7 @@
 import { create } from "zustand";
 import { api } from "./api";
 import { load, save } from "./prefs";
-import type { AiFace, AiResult, Color, Compared, Flag, FlagFilter, Marks, MetaEvent, Photo, Rank, SortKey, ViewMode } from "./types";
+import type { AiFace, AiResult, Color, Compared, FileKinds, Flag, FlagFilter, Marks, MetaEvent, Photo, Rank, SortKey, ViewMode } from "./types";
 
 interface Session {
   id: number;
@@ -12,6 +12,9 @@ interface Session {
   name: string;
   includeSubfolders: boolean;
   subfolderCount: number;
+  /** Which kinds of file it was opened for, and how many photos that left out. */
+  fileKinds: FileKinds;
+  leftOut: number;
   /** The folder opened already in the order it was shot. */
   timed: boolean;
 }
@@ -60,6 +63,8 @@ interface State {
   /** The strip's edge is being dragged, and its height is changing every frame. */
   stripResizing: boolean;
   includeSubfolders: boolean;
+  /** Which of a folder's files are shown as its photos. */
+  fileKinds: FileKinds;
   /** Move on to the next photo after marking one. Follows Caps Lock. */
   speedCull: boolean;
   /** The same, left on whatever Caps Lock is doing. */
@@ -279,6 +284,7 @@ const PERSISTED = [
   "showFilterBar",
   "filmstripHeight",
   "includeSubfolders",
+  "fileKinds",
   "warmAhead",
   "speedCullAlways",
   "keepZoom",
@@ -535,6 +541,7 @@ export const useStore = create<Store>((set, get) => {
     filmstripHeight: load("filmstripHeight", 120),
     stripResizing: false,
     includeSubfolders: load("includeSubfolders", false),
+    fileKinds: load<FileKinds>("fileKinds", "both"),
     speedCull: false,
     speedCullAlways: load("speedCullAlways", false),
     keepZoom: load("keepZoom", true),
@@ -588,9 +595,9 @@ export const useStore = create<Store>((set, get) => {
       const before = get();
       if (before.session) get().closeFolder();
 
-      const includeSubfolders = get().includeSubfolders;
+      const { includeSubfolders, fileKinds } = get();
       set({
-        session: { id: -1, folder: path, name: baseName(path), includeSubfolders, subfolderCount: 0, timed: false },
+        session: { id: -1, folder: path, name: baseName(path), includeSubfolders, subfolderCount: 0, fileKinds, leftOut: 0, timed: false },
         loading: true,
         openError: null,
         photos: [],
@@ -609,7 +616,7 @@ export const useStore = create<Store>((set, get) => {
 
       let reply;
       try {
-        reply = await api.openFolder(path, includeSubfolders);
+        reply = await api.openFolder(path, includeSubfolders, fileKinds);
       } catch (e) {
         set({ session: null, loading: false, openError: String(e) });
         return;
@@ -645,12 +652,16 @@ export const useStore = create<Store>((set, get) => {
 
       // Pick up where this folder was left.
       const remembered = load<string | null>(`position.${path}`, null);
-      const resume = remembered ? photos.findIndex((p) => p.path === remembered) : -1;
+      // Where this folder was left. By the frame, if not by the file: left
+      // on a RAW and opened for JPEGs alone, it is the same photo.
+      const frame = (path: string) => path.replace(/\.[^./\\]+$/, "").toLowerCase();
+      const exact = remembered ? photos.findIndex((p) => p.path === remembered) : -1;
+      const resume = exact >= 0 || !remembered ? exact : photos.findIndex((p) => frame(p.path) === frame(remembered));
       const current = photos.length === 0 ? -1 : resume >= 0 ? resume : order[0];
 
       const recents = [path, ...get().recents.filter((r) => r !== path)].slice(0, MAX_RECENTS);
       set({
-        session: { id: reply.session, folder: path, name: baseName(path), includeSubfolders, subfolderCount: reply.subfolderCount, timed: reply.timed },
+        session: { id: reply.session, folder: path, name: baseName(path), includeSubfolders, subfolderCount: reply.subfolderCount, fileKinds, leftOut: reply.leftOut, timed: reply.timed },
         loading: false,
         photos,
         order,

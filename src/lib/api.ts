@@ -7,7 +7,7 @@
 // out of the shipped bundle entirely.
 
 import { Channel, invoke } from "@tauri-apps/api/core";
-import type { AiEvent, Compared, Histogram, Marks, MetaEvent, RunFrame, Scanned } from "./types";
+import type { AiEvent, Compared, FileKinds, Histogram, Marks, MetaEvent, RunFrame, Scanned } from "./types";
 
 export interface AppInfo {
   platform: string;
@@ -23,6 +23,8 @@ export interface FolderReply {
   session: number;
   images: Scanned[];
   subfolderCount: number;
+  /** Photos not listed because of which kinds of file were asked for. */
+  leftOut: number;
   /** When each photo was taken, where that is known yet. */
   times: (number | null)[];
   /** Every time is known, so the folder can open in the order it was shot. */
@@ -107,7 +109,7 @@ export type Tier = "thumb" | "fit" | "screen" | "full";
 
 export interface Backend {
   appInfo(): Promise<AppInfo>;
-  openFolder(path: string, includeSubfolders: boolean): Promise<FolderReply>;
+  openFolder(path: string, includeSubfolders: boolean, kinds: FileKinds): Promise<FolderReply>;
   closeFolder(session: number): Promise<void>;
   loadMetadata(session: number, onEvent: (e: MetaEvent) => void): Promise<void>;
   prefetch(items: { path: string; version: string }[], size: number): Promise<void>;
@@ -173,7 +175,7 @@ const previewBase = /Windows|Android/.test(navigator.userAgent) ? "http://opencu
 
 const tauri: Backend = {
   appInfo: () => invoke("app_info"),
-  openFolder: (path, includeSubfolders) => invoke("open_folder", { path, includeSubfolders }),
+  openFolder: (path, includeSubfolders, kinds) => invoke("open_folder", { path, includeSubfolders, kinds }),
   closeFolder: (session) => invoke("close_folder", { session }),
   loadMetadata: (session, onEvent) => {
     const channel = new Channel<MetaEvent>();

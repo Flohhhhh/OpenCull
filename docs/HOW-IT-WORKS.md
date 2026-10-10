@@ -77,7 +77,10 @@ should work, but no file of those kinds has been tried.
 
 ## What is here, and what is not
 
-Here: opening folders, with or without subfolders; RAW + JPEG pairing; the
+Here: opening folders, with or without subfolders; RAW + JPEG pairing, or
+either kind alone (a pair is one photo with one sidecar, so a mark given to
+it is on both files; shown alone, a RAW or a JPEG leaves the other where it
+is); the
 loupe with zoom and pan, and zooming to a box dragged out with Command held
 (Control on Windows and Linux); filmstrip, grid and scene views; stars, flags
 and colour labels, written as sidecars; filters and sorting; burst grouping by

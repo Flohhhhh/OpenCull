@@ -188,6 +188,8 @@ pub struct FolderReply {
     session: u64,
     images: Vec<Scanned>,
     subfolder_count: usize,
+    /// Photos not listed because of which kinds of file were asked for.
+    left_out: usize,
     /// When each photo was taken, where that is known yet.
     times: Vec<Option<f64>>,
     /// Every photo's time is in `times`, so the folder can be shown in the
@@ -217,7 +219,8 @@ const TIME_BUDGET: Duration = Duration::from_millis(1500);
 /// on screen before either — but the capture times are read here, by the
 /// short route, because the order of the folder depends on them.
 #[tauri::command]
-pub async fn open_folder(app: AppState<'_>, path: String, include_subfolders: bool) -> Result<FolderReply, String> {
+pub async fn open_folder(app: AppState<'_>, path: String, include_subfolders: bool, kinds: Option<scan::Kinds>) -> Result<FolderReply, String> {
+    let kinds = kinds.unwrap_or_default();
     let folder = PathBuf::from(&path);
     if !folder.is_dir() {
         return Err(format!("{path} is not a folder"));
@@ -226,7 +229,7 @@ pub async fn open_folder(app: AppState<'_>, path: String, include_subfolders: bo
     let scanned_folder = folder.clone();
     let (result, read) = tauri::async_runtime::spawn_blocking(move || {
         let folder = scanned_folder;
-        let result = scan::scan_folder(&folder, include_subfolders);
+        let result = scan::scan_folder_of(&folder, include_subfolders, kinds);
         let known = shared.times.load(&folder);
         let deadline = Instant::now() + TIME_BUDGET;
 
@@ -261,7 +264,7 @@ pub async fn open_folder(app: AppState<'_>, path: String, include_subfolders: bo
         session,
         Arc::new(Session { folder, images: result.images.clone(), timed, closed: AtomicBool::new(false) }),
     );
-    Ok(FolderReply { session, images: result.images, subfolder_count: result.subfolder_count, times, timed, groups })
+    Ok(FolderReply { session, images: result.images, subfolder_count: result.subfolder_count, left_out: result.left_out, times, timed, groups })
 }
 
 #[tauri::command]

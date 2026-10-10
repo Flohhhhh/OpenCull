@@ -141,6 +141,12 @@ export interface Histogram {
   luma: number[];
 }
 
+/**
+ * Which of a folder's files are its photos: a RAW and its JPEG together as
+ * one, the RAWs alone, or everything that is not a RAW.
+ */
+export type FileKinds = "both" | "raw" | "jpeg";
+
 export type ViewMode = "loupe" | "scene" | "grid";
 export type SortKey = "captureTime" | "filename" | "rating";
 export type FlagFilter = "all" | "picks" | "unflagged" | "rejects";

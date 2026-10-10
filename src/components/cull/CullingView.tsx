@@ -62,13 +62,34 @@ function EmptyFolder() {
   if (!session) return null;
   const hidden = session.subfolderCount > 0 && !session.includeSubfolders;
   const Icon = hidden ? FolderSearch : Images;
+  // Photos are here, of the kind Settings says not to show.
+  const otherKind = session.leftOut > 0 && session.fileKinds !== "both";
+  const [wanted, unwanted] = session.fileKinds === "raw" ? ["RAW files", "JPEG"] : ["JPEGs", "RAW"];
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3.5 text-center">
       <Icon className="size-11 text-[#737373]" strokeWidth={1} />
       <div className="text-lg font-medium text-[#d9d9d9]">No photos in this folder</div>
       <div className="text-sm text-[#808080]">{session.name}</div>
-      {hidden ? (
+      {otherKind && (
+        <>
+          <p className="max-w-[420px] pt-1 text-sm text-[#999]">
+            It holds {session.leftOut === 1 ? `1 ${unwanted} photo` : `${session.leftOut.toLocaleString()} ${unwanted} photos`}, and Settings is set to show only {wanted}.
+          </p>
+          <Button
+            size="lg"
+            className="mt-1"
+            onClick={() => {
+              useStore.getState().set("fileKinds", "both");
+              useStore.getState().reloadForSubfolders();
+            }}
+          >
+            Show RAW + JPEG
+          </Button>
+          <p className="text-xs text-[#737373]">Stays that way for folders you open from now on. Change it any time in Settings.</p>
+        </>
+      )}
+      {otherKind ? null : hidden ? (
         <>
           <p className="max-w-[420px] pt-1 text-sm text-[#999]">
             It contains {session.subfolderCount === 1 ? "1 subfolder" : `${session.subfolderCount} subfolders`}. Photos inside subfolders are not opened unless you ask for them.

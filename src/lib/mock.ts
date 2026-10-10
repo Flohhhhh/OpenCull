@@ -55,7 +55,7 @@ export const mock: Backend = {
   appInfo: () => later({ platform: "macos", version: "dev", cacheDir: "/tmp/opencull", openPath: null, selfTest: false }),
   // Untimed, so the slower path — filename order first, shooting order once
   // the metadata is in — is the one a browser tab exercises.
-  openFolder: () => later({ session: 1, images, subfolderCount: 2, times: images.map(() => null), timed: false, groups: null }, 150),
+  openFolder: () => later({ session: 1, images, subfolderCount: 2, leftOut: 0, times: images.map(() => null), timed: false, groups: null }, 150),
   closeFolder: () => later(undefined),
   loadMetadata: async (_session, onEvent) => {
     // Bursts of one to six frames, a few seconds apart.
