@@ -51,7 +51,6 @@
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
-    <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
@@ -182,26 +181,6 @@ among the frames it was shot with, with **1** the one to look at first.
 
 _For how any of this works, and how well, see
 [How it works](docs/HOW-IT-WORKS.md)._
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- ROADMAP -->
-## Roadmap
-
-- [x] Open folders from embedded previews; stars, flags and labels as sidecars
-- [x] Loupe, filmstrip, grid and scene views
-- [x] Ingest from a card, and Ship to an editor
-- [x] Face analysis: eyes, gaze, sharpness, subject or background
-- [x] Ranking across a burst, and across a pose shot again
-- [ ] Real-world testing on Windows and Linux
-- [ ] Signed and notarised downloads
-- [ ] A build for Intel Macs
-- [ ] HEIC
-- [ ] RAW rendering, for cameras that embed only a small preview
-- [ ] Splitting bursts by what is in the picture, not only by the clock
-
-See the [open issues][issues-url] for what is being worked on and what is
-known to be wrong.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
