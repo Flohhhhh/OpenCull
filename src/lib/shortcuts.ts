@@ -10,7 +10,7 @@ export type Action =
   | "pick" | "reject" | "unflag"
   | "rate0" | "rate1" | "rate2" | "rate3" | "rate4" | "rate5" | "clearRating"
   | "tagRed" | "tagYellow" | "tagGreen" | "tagBlue" | "tagPurple" | "tagNone"
-  | "zoomToggle" | "zoomIn" | "zoomOut"
+  | "zoomToggle" | "zoomCentre" | "zoomIn" | "zoomOut"
   | "viewGrid" | "toggleFilmstrip" | "toggleFaces" | "toggleHistogram" | "toggleInfo" | "toggleSpeedCull"
   | "ship" | "moveToTrash" | "selectAll" | "undo" | "redo";
 
@@ -68,6 +68,7 @@ export const SECTIONS: { title: string; actions: [Action, string][] }[] = [
     title: "View",
     actions: [
       ["zoomToggle", "Zoom in and out"],
+      ["zoomCentre", "Zoom into the middle"],
       ["zoomIn", "Zoom in"],
       ["zoomOut", "Zoom out"],
       ["viewGrid", "Grid view"],
@@ -97,7 +98,7 @@ export const SECTIONS: { title: string; actions: [Action, string][] }[] = [
  */
 export const CAPS_LOCK = "CapsLock";
 
-/** The Mac app's defaults, key for key. */
+/** The Mac app's defaults, key for key, and Space for the middle of the photo. */
 export const DEFAULTS: Record<Action, Combo> = {
   nextImage: { code: "ArrowRight" },
   previousImage: { code: "ArrowLeft" },
@@ -120,6 +121,7 @@ export const DEFAULTS: Record<Action, Combo> = {
   tagPurple: { code: "KeyN" },
   tagNone: { code: "Digit0", mod: true },
   zoomToggle: { code: "KeyZ" },
+  zoomCentre: { code: "Space" },
   zoomIn: { code: "Equal", mod: true },
   zoomOut: { code: "Minus", mod: true },
   viewGrid: { code: "KeyG" },
@@ -199,6 +201,7 @@ export function perform(action: Action): void {
     case "tagRed": case "tagYellow": case "tagGreen": case "tagBlue": case "tagPurple":
       return s.setColor(COLOR_OF[action]!);
     case "zoomToggle": return s.zoomCommand("toggle");
+    case "zoomCentre": return s.zoomCommand("centre");
     case "zoomIn": return s.zoomCommand("in");
     case "zoomOut": return s.zoomCommand("out");
     case "viewGrid": return s.set("viewMode", s.viewMode === "grid" ? "loupe" : "grid");
@@ -257,6 +260,8 @@ export function installShortcuts(bindings: () => Record<Action, Combo>, recordin
     if (!action) return;
 
     e.preventDefault();
+    // Held down, these would flip between fit and zoomed many times a second.
+    if (e.repeat && (action === "zoomToggle" || action === "zoomCentre")) return;
     perform(action);
   };
   window.addEventListener("keydown", onKey);

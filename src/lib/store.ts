@@ -22,7 +22,7 @@ interface Session {
 /** One undoable step: every photo it touched, before and after. */
 type Edit = { index: number; before: Marks; after: Marks }[];
 
-export type ZoomCommand = { kind: "toggle" | "in" | "out"; nonce: number };
+export type ZoomCommand = { kind: "toggle" | "centre" | "in" | "out"; nonce: number };
 
 interface State {
   platform: string;
