@@ -147,9 +147,10 @@ The same is done for a pose shot again. A group lined up and photographed
 five times, a press at a time, is five bursts by the clock and one pose to
 the photographer: frames taken within twenty seconds of one another with the
 same people in the same places are compared, and ranked, as one, and are
-one scene in Scene View and one group in the filmstrip. "Intelligent
-grouping" in Settings turns this off, leaving only the frames of one press
-grouped. A folder still being scanned starts out grouped by the clock and
+one scene in Scene View and one group in the filmstrip. An upright photo
+and one on its side are never grouped, however alike: turning the camera
+is making another picture. "Intelligent grouping" in Settings turns poses
+off, leaving only the frames of one press grouped. A folder still being scanned starts out grouped by the clock and
 settles into poses as the scan reaches them. In a test
 of 2,328 photos that is 512 poses holding 1,579 photos, the largest of 25
 frames, and 61 subjects caught blinking whose eyes had not been called shut;

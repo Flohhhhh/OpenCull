@@ -264,7 +264,7 @@ export async function runSelfTest(folder: string): Promise<void> {
       if (again > first / 3 && again > 300) throw new Error("a second analysis was not served from memory");
       // The frames of a burst marked against each other. Any run of photos
       // will do to show the route works; real bursts are not needed for that.
-      const run = some.slice(0, 6).map((index) => ({ ...whole.get(index)!, time: s().photos[index].captureMs, burst: 1 }));
+      const run = some.slice(0, 6).map((index) => ({ ...whole.get(index)!, time: s().photos[index].captureMs, burst: 1, upright: null }));
       const [marked] = await api.aiCompare([run], true);
       if (marked.length !== run.length || marked.some((m, at) => m.eyes.length !== run[at].faces.length)) throw new Error("burst comparison did not answer for every face");
       const shares = marked.flatMap((m) => m.eyes).filter((e): e is number => e !== null);

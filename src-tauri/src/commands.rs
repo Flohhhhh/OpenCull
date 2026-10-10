@@ -730,6 +730,8 @@ pub struct RunFrame {
     record: ai::store::Record,
     time: Option<f64>,
     burst: Option<u32>,
+    #[serde(default)]
+    upright: Option<bool>,
 }
 
 /// Marks the frames of each pose against one another: who blinked in which.
@@ -738,7 +740,7 @@ pub struct RunFrame {
 #[tauri::command]
 pub fn ai_compare(runs: Vec<Vec<RunFrame>>, poses: bool) -> Vec<Vec<ai::series::Compared>> {
     runs.iter()
-        .map(|run| ai::series::compare_run(&run.iter().map(|f| ai::series::Frame { record: &f.record, time: f.time, burst: f.burst }).collect::<Vec<_>>(), poses))
+        .map(|run| ai::series::compare_run(&run.iter().map(|f| ai::series::Frame { record: &f.record, time: f.time, burst: f.burst, upright: f.upright }).collect::<Vec<_>>(), poses))
         .collect()
 }
 

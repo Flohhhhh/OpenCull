@@ -208,6 +208,11 @@ export function groupOf(s: Pick<State, "photos" | "poses">, index: number): numb
   return pose !== undefined ? pose : (s.photos[index]?.group ?? null);
 }
 
+/** Whether a photo is taller than it is wide, the way up it is shown; null until its shape has been read. */
+export function uprightOf(photo: Photo): boolean | null {
+  return photo.fullWidth > 0 && photo.fullHeight > 0 ? photo.fullHeight > photo.fullWidth : null;
+}
+
 /**
  * Photos further apart than this are never compared: they cannot be the same
  * pose. The backend holds the same figure and does the deciding; this only
@@ -484,7 +489,7 @@ export const useStore = create<Store>((set, get) => {
     const ready = [...new Set(touched.map((i) => of.get(i)).filter((at) => at !== undefined))].map((at) => list[at]).filter((run) => run.every((i) => ai[i] !== undefined));
     if (ready.length === 0) return;
     void api
-      .aiCompare(ready.map((run) => run.map((i) => ({ ...ai[i]!, time: photos[i].captureMs, burst: photos[i].group }))), smartGroups)
+      .aiCompare(ready.map((run) => run.map((i) => ({ ...ai[i]!, time: photos[i].captureMs, burst: photos[i].group, upright: uprightOf(photos[i]) }))), smartGroups)
       .then((marked) => {
         const now = get();
         // A folder since closed, or the setting changed while this was asked.
