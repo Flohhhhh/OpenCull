@@ -1,318 +1,289 @@
-# OpenCull
+<a id="readme-top"></a>
 
-Photo culling for photographers: open a shoot, go through it fast, and mark
-what to keep. Free software, for macOS, Windows and Linux.
+<!-- PROJECT SHIELDS -->
+[![Release][release-shield]][release-url]
+[![Build][build-shield]][build-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![GPL-3.0][license-shield]][license-url]
+[![Instagram][instagram-shield]][instagram-url]
 
-- Opens a folder of RAWs in a fraction of a second, straight from the
-  previews the camera already wrote into each file. No import, no catalogue.
-- Stars, flags and colour labels, written as standard sidecar files that
-  Lightroom, Capture One and the rest read.
-- Finds the faces in every photo and tells you whose eyes are shut, who is
-  looking away and how sharp each one is — on your own computer, with nothing
-  sent anywhere.
-- Follows each person through a burst, or through a pose shot again, and
-  ranks the frames: which one has everyone's eyes open.
-- Copies photos off a card, and hands the keepers to your editing program.
+<!-- PROJECT LOGO -->
+<br />
+<div align="center">
+  <a href="https://github.com/NatePhotos/OpenCull">
+    <img src="docs/images/logo.png" alt="OpenCull" width="96" height="96">
+  </a>
 
-Built with [Tauri](https://tauri.app): Rust underneath, React on top.
+<h3 align="center">OpenCull</h3>
 
-## Status
+  <p align="center">
+    Photo culling for photographers: fast, private and free.
+    <br />
+    For macOS, Windows and Linux.
+    <br />
+    <a href="docs/HOW-IT-WORKS.md"><strong>How it works »</strong></a>
+    <br />
+    <br />
+    <a href="https://github.com/NatePhotos/OpenCull/releases">Download</a>
+    &middot;
+    <a href="https://github.com/NatePhotos/OpenCull/issues/new?labels=bug">Report Bug</a>
+    &middot;
+    <a href="https://github.com/NatePhotos/OpenCull/issues/new?labels=enhancement">Request Feature</a>
+  </p>
+</div>
 
-Early. It is used daily on a Mac, and everything below was built and measured
-there. **It has not yet been run on Windows or Linux** — the code has a form
-for each, and none of it has been tried. There are no ready-made downloads
-yet: for now it is built from source, as below. Reports from other systems
-are very welcome.
+<!-- TABLE OF CONTENTS -->
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li>
+      <a href="#about-the-project">About The Project</a>
+      <ul>
+        <li><a href="#built-with">Built With</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#download">Download</a></li>
+        <li><a href="#build-from-source">Build From Source</a></li>
+      </ul>
+    </li>
+    <li><a href="#usage">Usage</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#license">License</a></li>
+    <li><a href="#contact">Contact</a></li>
+    <li><a href="#acknowledgments">Acknowledgments</a></li>
+  </ol>
+</details>
 
-OpenCull began as a rewrite of an earlier Mac-only app. Where this document
-or the code says "the Mac app", that is what is meant: many of the figures
-here are comparisons against it, and it reads and writes the same sidecar
-files, so a folder culled in one opens in the other with every rating in
-place.
+<!-- ABOUT THE PROJECT -->
+## About The Project
 
-## Running it
+Culling is the first job after a shoot: going through every frame and
+deciding what to keep. OpenCull is built to make that fast.
 
-Needs [Rust](https://rustup.rs) and [Node](https://nodejs.org). On Windows and
-Linux there are a few system packages as well — see
+* **Opens a shoot at once.** A folder of RAWs opens in a fraction of a second,
+  straight from the previews the camera already wrote into each file. No
+  import, no catalogue, nothing to wait for.
+* **Marks you can take anywhere.** Stars, flags and colour labels are written
+  as standard sidecar files that Lightroom, Capture One and the rest read.
+* **Looks at the faces for you.** It finds the faces in every photo and shows
+  whose eyes are shut, who is looking away and how sharp each one is.
+* **Compares a person with themselves.** It follows each person through a
+  burst, or through a pose shot again, and ranks the frames, so the one with
+  everyone's eyes open is the one it puts first.
+* **Keeps your photos yours.** Everything runs on your own computer. Nothing
+  is uploaded, and there is no account.
+* **Start to finish.** Copy photos off a card, cull them, and hand the keepers
+  to your editing program.
+
+**Status: early.** It is used daily on a Mac. The Windows and Linux versions
+build and pass their tests, but nobody has used them for real work yet. If
+you do, reports are very welcome, good or bad.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+### Built With
+
+* [![Tauri][Tauri-badge]][Tauri-url]
+* [![Rust][Rust-badge]][Rust-url]
+* [![React][React-badge]][React-url]
+* [![TypeScript][TypeScript-badge]][TypeScript-url]
+* [![Tailwind CSS][Tailwind-badge]][Tailwind-url]
+* [![ONNX Runtime][ONNX-badge]][ONNX-url]
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<!-- GETTING STARTED -->
+## Getting Started
+
+### Download
+
+Installers are on the [releases page][release-url].
+
+| System | File |
+|---|---|
+| macOS, Apple silicon (M1 and later) | `.dmg` |
+| Windows 10 and 11 | `-setup.exe` |
+| Linux (Ubuntu 24.04, Fedora 40, Debian 13 or newer) | `.AppImage`, `.deb` or `.rpm` |
+
+They are not signed with a paid developer certificate, so each system asks
+before running them the first time:
+
+* **macOS** — open the `.dmg` and drag OpenCull to Applications. The first
+  time you open it macOS will refuse. Go to System Settings → Privacy &
+  Security, scroll down, and choose **Open Anyway**.
+* **Windows** — SmartScreen shows "Windows protected your PC". Choose **More
+  info**, then **Run anyway**.
+* **Linux** — for the AppImage, make it executable (`chmod +x`) and run it.
+
+### Build From Source
+
+You need [Rust](https://rustup.rs) and [Node](https://nodejs.org), and one
+thing for the JPEG library: `brew install jpeg-turbo` on macOS, or CMake
+(plus NASM on Intel and AMD machines) on Windows and Linux. Windows and Linux
+also need the system packages on
 [Tauri's list](https://tauri.app/start/prerequisites/).
 
-```bash
-npm install
-```
+1. Clone the repo
+   ```sh
+   git clone https://github.com/NatePhotos/OpenCull.git
+   cd OpenCull
+   ```
+2. Install the packages
+   ```sh
+   npm install
+   ```
+3. Run it
+   ```sh
+   npm run tauri dev
+   ```
+4. Or build the app itself
+   ```sh
+   npm run tauri build
+   ```
 
-```bash
-npm run tauri dev
-```
+More on building, including how to build without the JPEG library, is in
+[How it works](docs/HOW-IT-WORKS.md#building-the-fast-jpeg-library).
 
-To build the app itself:
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-```bash
-npm run tauri build
-```
+<!-- USAGE EXAMPLES -->
+## Usage
 
-If `cargo` is reported missing, Rust is installed but not on the shell's path:
+Open a folder, or choose **Ingest from Card** to copy a card first. Then go
+through the shoot from the keyboard:
 
-```bash
-source ~/.cargo/env
-```
-
-### The fast JPEG library
-
-Previews are decoded and written by libjpeg-turbo, which is about two and a
-half times as fast as the pure-Rust code the app can otherwise fall back on.
-It is the one part of the build that is not plain Rust, so each platform has
-one thing to install first:
-
-- **macOS** — `brew install jpeg-turbo`
-- **Windows, Linux** — CMake, and NASM on Intel and AMD machines. The library
-  is then built from source as part of the app.
-
-Either way it is built into the app; nothing extra is needed to *run* it.
-Which of the two is used is set per platform in `src-tauri/tauri.*.conf.json`.
-
-To build without it — on a machine with none of the above, say — clear the
-feature list. The app works the same and makes new previews more slowly:
-
-```bash
-npm run tauri build -- --config '{"build":{"features":[]}}'
-```
-
-A folder can be named on the command line to open it straight away.
-
-## How previews are made
-
-No RAW is decoded. A camera writes finished JPEGs into every RAW it saves, and
-says where they are in a directory at the front of the file. The app reads that
-directory and lifts the pictures out.
-
-Four sizes, each made the cheapest way that size allows:
-
-| | For | How |
-|---|---|---|
-| Thumbnail | filmstrip, grid | cut from the camera's small screen-sized preview |
-| Screen | the loupe, at once | that same preview's own bytes, handed over untouched |
-| Fit | the loupe, sharp | the full-size preview, decoded at half size |
-| Full | zoomed in | the full-size preview's own bytes, handed over untouched |
-
-A JPEG straight from the camera holds no screen-sized preview, only itself,
-so one is made for it (57 ms from a 30-megapixel file on a USB SSD) and kept.
-It is what a held arrow key shows: small enough to be decoded faster than the
-key repeats, where the loupe rendering is not.
-
-Thumbnails and fit previews are kept on disk, so each is only ever made once.
-A photo's orientation is corrected by telling the picture which way up it is,
-rather than by re-encoding it.
-
-A folder opens in the order it was shot, on its true first frame. Filenames
-cannot give that order when two cameras were used — each numbers its own
-frames — so the capture times are read as the folder is listed, by a route
-much shorter than a full read of each file's metadata, and remembered for the
-next time the folder is opened. If a folder is too slow to time within a
-second and a half, it opens by filename instead and settles afterwards.
-
-The loupe stacks them: thumbnail, then screen, then fit, each shown as it
-arrives. The screen-sized one costs nothing to make, so a photo jumped to cold
-shows a real picture in about a millisecond while its fit rendering is made.
-
-While nothing else is going on, fit renderings for the two thousand photos
-around the current one are made in the background, so that a jump lands on one
-already made. This stops the moment anything is asked for, and runs on a third
-of the machine's cores, kept apart from the ones the photo on screen uses.
-It can be turned off in Settings.
-
-Measured on an M-series Mac, over 3,002 Sony RAWs on a USB SSD, from scratch:
-
-| | |
+| Key | What it does |
 |---|---|
-| Listing the folder | 0.29 s |
-| Learning when every photo was taken | 0.075 ms a photo |
-| Opening a 2,000-photo folder for the first time, in shooting order | 0.4 s |
-| Finding a file's previews | 0.04 ms |
-| Thumbnails | 2,580 a second |
-| Loupe previews | 164 a second |
-| A photo that was looked ahead to | 1 ms |
-| A photo jumped to cold: something to look at | about 1 ms |
-| A photo jumped to cold: the sharp rendering | about 60 ms |
-| The same jump while the folder is being prepared | no slower |
-| Preparing the folder in the background | about 70 photos a second |
-| Any of them a second time | under 0.1 ms |
+| `←` `→` | Previous and next photo |
+| `↑` `↓` | Previous and next group (a burst, or a pose shot again) |
+| `P` `X` `U` | Pick, reject, clear the flag |
+| `1`–`5`, `0` | Star rating, and none |
+| `6` `7` `8` `9` `N` | Red, yellow, green, blue and purple labels |
+| `Z` | Zoom in to where you last looked, and back out |
+| `G` | Grid view |
+| `.` | Face panel |
+| `F` `H` `I` | Filmstrip, histogram and EXIF, info overlay |
+| `Caps Lock` | Speed cull: move on to the next photo after each mark |
+| `⌘E` / `Ctrl+E` | Ship: open the keepers in your editor, or copy or move them |
+| `⌘Z` / `Ctrl+Z` | Undo |
 
-Without libjpeg-turbo the middle of that table is slower: 1,640 thumbnails
-and 72 loupe previews a second, about 115 ms for a cold sharp rendering, and
-23 photos a second in the background.
+Every shortcut can be changed in Settings.
 
-Sony ARW, Nikon NEF, Canon CR2 and CR3, Fuji RAF, Leica DNG and plain JPEG have
-all been opened with it. ORF, RW2, PEF and SRW share the same structure and
-should work, but no file of those kinds has been tried.
+The face panel on the right shows each face in the photo, cut out large
+enough to judge. The top square on each is its eyes (green for open, through
+to red for shut); the bottom one is its sharpness out of ten. Point at them
+for the words. The coloured bar under each thumbnail is the photo's rank
+among the frames it was shot with, with **1** the one to look at first.
 
-## Checking it works
+_For how any of this works, and how well, see
+[How it works](docs/HOW-IT-WORKS.md)._
 
-The logic has unit tests:
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-```bash
-npm test
-```
+<!-- ROADMAP -->
+## Roadmap
 
-And the app can run itself against a real folder with no window on screen —
-opening it, loading previews the way clicks would, and printing what happened:
+- [x] Open folders from embedded previews; stars, flags and labels as sidecars
+- [x] Loupe, filmstrip, grid and scene views
+- [x] Ingest from a card, and Ship to an editor
+- [x] Face analysis: eyes, gaze, sharpness, subject or background
+- [x] Ranking across a burst, and across a pose shot again
+- [ ] Real-world testing on Windows and Linux
+- [ ] Signed and notarised downloads
+- [ ] A build for Intel Macs
+- [ ] HEIC
+- [ ] RAW rendering, for cameras that embed only a small preview
+- [ ] Splitting bursts by what is in the picture, not only by the clock
 
-```bash
-npm run tauri build -- --debug --no-bundle
-```
+See the [open issues][issues-url] for what is being worked on and what is
+known to be wrong.
 
-```bash
-./src-tauri/target/debug/opencull --selftest /path/to/a/folder/of/photos
-```
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-It never writes to the folder. This is the thing to run first on a new
-machine: the parts most likely to break on another platform are the ones a
-compiler cannot see.
-
-It shows a window one point square in a corner of the screen, beneath
-everything else. That is deliberate: a web view in a window that is fully
-hidden has its scripts suspended by the system a few seconds in.
-
-Three small tools for looking at files directly:
-
-```bash
-cd src-tauri && cargo run --release --example probe -- /path/to/photo.ARW
-```
-
-`probe` says what previews a file holds; `bench` and `bench_fit` compare
-decoders on it; `throughput` runs the whole pipeline over a folder. Add
-`--features turbo-system` (or `turbo`) to run them with libjpeg-turbo.
-
-## What is here, and what is not
-
-Here: opening folders, with or without subfolders; RAW + JPEG pairing; the
-loupe with zoom and pan, and zooming to a box dragged out with Command held
-(Control on Windows and Linux); filmstrip, grid and scene views; stars, flags
-and colour labels, written as sidecars; filters and sorting; burst grouping by
-capture time; EXIF panel and histogram; undo; move to trash; copying and moving
-photos to another folder; Ship; rebindable shortcuts; recent folders; the Mac
-app's settings, less the ones that belong to features not here.
-
-Ingest copies photos off a card: it lists cards and outside drives, shows what
-is on them, and copies the chosen photos with their JPEGs and in-camera stars.
-Every copy is checked for size before it is given its name, nothing is left
-half written, and nothing is replaced unless that is asked for. Quitting is
-refused while a copy runs. MEASURED reading a CFexpress card on a Mac, into the
-internal drive: 5,320 photos listed in 0.36 s, capture times read at 1.3 ms a
-photo, and copied at 1.1 GB/s one at a time and 1.3 GB/s four at a time. Finding
-cards on Windows and Linux is written and has never been run.
-
-Face analysis finds the faces in each photo and judges them — eyes shut,
-looking away, how sharp, subject or background — then marks the photo and
-ranks the frames of each burst. It uses no part of the system it runs on: two
-model files, run through ONNX Runtime, give the same answers on every
-platform. One finds faces; the other judges each one, and says when what
-was found is not a face at all — a hand, a plate of food, the back of a head.
-MEASURED against the Mac app on 356 labelled faces: eyes 0.936 to 0.892,
-gaze 0.962 to 0.880, background people caught 91% to 71% at the same cost. Of
-what the finder wrongly boxes, 88% is thrown out, and with it 1.2% of real
-faces, nearly all seen from behind. Looking away is called on the judge's
-looking-away score or on pupils sitting to one side of a face held square:
-on 615 labelled faces that catches 79% and wrongly accuses 5.4%, and on 1,360
-faces known to be looking at the camera it wrongly accuses 12. Bursts are still split
-by the clock alone.
-
-A photo with nobody in it — a table, a tray of pastries, a cufflink, a
-venue — is marked on how sharp its subject is, and the face panel shows that
-part of the photo where the faces would be. The Mac app finds the subject
-with Apple's map of where the eye goes; here it is what stands out from the
-rest of the picture (the spectral residual) and is in focus, leaning to the
-middle of the frame, in 16 ms a photo. Looked at on 100 photos with no faces,
-with the choice drawn on each, it is on the subject in about nine of ten; it
-misses a small figure in a wide landscape.
-
-Within a burst each person is followed from frame to frame by where they
-stand, and each frame is marked on how open their eyes are as a share of
-their own best — narrow eyes wide open and wide eyes half shut measure alike
-until they are set beside the same person a moment earlier. The face panel
-shows that share for each face. Looked at by eye on 200 such comparisons:
-under 60% nearly every one is a blink, half a blink or eyes cast down; over
-80% the frames cannot be told apart, and nothing is taken off.
-
-The same is done for a pose shot again. A group lined up and photographed
-five times, a press at a time, is five bursts by the clock and one pose to
-the photographer: frames taken within twenty seconds of one another with the
-same people in the same places are compared, and ranked, as one, and are
-one scene in Scene View and one group in the filmstrip. "Intelligent
-grouping" in Settings turns this off, leaving only the frames of one press
-grouped. A folder still being scanned starts out grouped by the clock and
-settles into poses as the scan reaches them. In a test
-of 2,328 photos that is 512 poses holding 1,579 photos, the largest of 25
-frames, and 61 subjects caught blinking whose eyes had not been called shut;
-in one of 134 photos each taken with its own press, 28 poses where the
-clock alone found 2 bursts. Someone who moves across the frame
-between frames, turns their head away or wears dark glasses is not followed.
-
-Ship opens photos in an editing program, copies or moves them, or both. It has
-only been run on a Mac, and only its copying has been run at all: opening
-Lightroom Classic and Aftershoot is the same call the Mac app makes, but
-Lightroom (the cloud one), Capture One, and everything on Windows and Linux
-were written without the program there to try. Nothing at a destination is
-ever replaced, and nothing is left there half written.
-
-Not here yet:
-
-- **Burst grouping by picture** — the Mac app splits frames close in time that
-  look nothing alike. Here it is the clock alone.
-- **RAW rendering and auto-exposure** — needs a real RAW decoder. Cameras that
-  embed only a small preview (older bodies, mostly) therefore cannot be zoomed
-  further than that preview goes.
-- **HEIC** — nothing portable decodes it.
-- **Adobe RGB previews without a colour profile.** A profile embedded in a
-  preview is carried through. Cameras that mark Adobe RGB only in EXIF will
-  show slightly muted.
-
-Lens names are read from standard EXIF. Nikon and older Canon bodies keep
-theirs somewhere private, so those show as unknown.
-
-## Layout
-
-```
-src-tauri/src/
-  raw/         finding previews and EXIF inside files, by reading directories
-  preview.rs   decode, shrink, turn upright, encode
-  pool.rs      what gets made first: the photo on screen, then newest asked
-  cache.rs     previews kept on disk
-  serve.rs     hands previews to the web view by address
-  scan.rs      listing folders, pairing RAW with JPEG
-  xmp.rs       sidecar ratings, read and written
-  burst.rs     which frames came from one press of the shutter
-  commands.rs  what the interface can ask for
-src/
-  lib/         state, shortcuts, the bridge to the backend
-  components/  home screen, loupe, filmstrip, grid, toolbar, panels
-```
-
-## Only tried on a Mac
-
-Everything above was built and measured on macOS. The code avoids anything
-platform-specific — positioned reads, trash, and the preview addresses each
-have a Windows form — but none of it has been run there.
-
+<!-- CONTRIBUTING -->
 ## Contributing
 
-Issues and pull requests are welcome, most of all from anyone who can run it
-on Windows or Linux. `npm test` runs the unit tests; the self-test above runs
-the whole app against a folder of your own photos without touching them.
+Contributions are welcome, most of all from anyone who can run OpenCull on
+Windows or Linux and say what happened.
+
+If you have a suggestion, open an issue with the tag "enhancement", or fork
+the repo and open a pull request:
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+`npm test` runs the unit tests. The app can also run itself against a folder
+of your own photos with no window on screen and without touching them; see
+[Checking it works](docs/HOW-IT-WORKS.md#checking-it-works).
+
 Please do not attach other people's photographs to an issue.
 
-## Licence
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<!-- LICENSE -->
+## License
 
 Copyright © 2026 The OpenCull authors.
 
-OpenCull is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version.
+Distributed under the GNU General Public License, version 3 or (at your
+option) any later version. It comes with no warranty. See [`LICENSE`](LICENSE)
+for the full text, and [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) for
+what OpenCull is built on and the licences those come under.
 
-It is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-The full text is in [`LICENSE`](LICENSE). What the app is built on, and the
-licences those come under, is in
-[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+<!-- CONTACT -->
+## Contact
+
+NatePhotos - [@natephotos.ny](https://www.instagram.com/natephotos.ny) - natephotos.ny@gmail.com
+
+Project Link: [https://github.com/NatePhotos/OpenCull](https://github.com/NatePhotos/OpenCull)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<!-- ACKNOWLEDGMENTS -->
+## Acknowledgments
+
+* [Tauri](https://tauri.app)
+* [ONNX Runtime](https://onnxruntime.ai) and the [ort](https://ort.pyke.io) crate
+* [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet), the face finder
+* [libjpeg-turbo](https://libjpeg-turbo.org)
+* [shadcn/ui](https://ui.shadcn.com), [Radix UI](https://www.radix-ui.com) and [Lucide](https://lucide.dev)
+* [Best-README-Template](https://github.com/othneildrew/Best-README-Template)
+* [Shields.io](https://shields.io)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<!-- MARKDOWN LINKS & IMAGES -->
+[release-shield]: https://img.shields.io/github/v/release/NatePhotos/OpenCull?include_prereleases&style=for-the-badge
+[release-url]: https://github.com/NatePhotos/OpenCull/releases
+[build-shield]: https://img.shields.io/github/actions/workflow/status/NatePhotos/OpenCull/build.yml?branch=main&style=for-the-badge
+[build-url]: https://github.com/NatePhotos/OpenCull/actions/workflows/build.yml
+[stars-shield]: https://img.shields.io/github/stars/NatePhotos/OpenCull.svg?style=for-the-badge
+[stars-url]: https://github.com/NatePhotos/OpenCull/stargazers
+[issues-shield]: https://img.shields.io/github/issues/NatePhotos/OpenCull.svg?style=for-the-badge
+[issues-url]: https://github.com/NatePhotos/OpenCull/issues
+[license-shield]: https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=for-the-badge
+[license-url]: https://github.com/NatePhotos/OpenCull/blob/main/LICENSE
+[instagram-shield]: https://img.shields.io/badge/-Instagram-black.svg?style=for-the-badge&logo=instagram&colorB=555
+[instagram-url]: https://www.instagram.com/natephotos.ny
+[Tauri-badge]: https://img.shields.io/badge/Tauri-24C8D8?style=for-the-badge&logo=tauri&logoColor=white
+[Tauri-url]: https://tauri.app
+[Rust-badge]: https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white
+[Rust-url]: https://www.rust-lang.org
+[React-badge]: https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB
+[React-url]: https://react.dev
+[TypeScript-badge]: https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white
+[TypeScript-url]: https://www.typescriptlang.org
+[Tailwind-badge]: https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white
+[Tailwind-url]: https://tailwindcss.com
+[ONNX-badge]: https://img.shields.io/badge/ONNX_Runtime-005CED?style=for-the-badge&logo=onnx&logoColor=white
+[ONNX-url]: https://onnxruntime.ai
