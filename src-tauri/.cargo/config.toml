@@ -1,0 +1,5 @@
+# libjpeg-turbo is built into the app rather than looked for at run time, so
+# the app runs on a machine that does not have it installed. Only matters when
+# an installed copy is being used; one built from source is always built in.
+[env]
+TURBOJPEG_STATIC = "1"

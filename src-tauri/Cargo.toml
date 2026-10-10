@@ -1,0 +1,83 @@
+[package]
+name = "opencull"
+version = "0.1.0"
+description = "OpenCull — photo culling for macOS, Windows and Linux"
+authors = ["The OpenCull authors"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/NatePhotos/OpenCull"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "opencull_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# The JPEG work — decoding a camera's preview and writing a smaller one — can
+# be done by libjpeg-turbo instead of the pure-Rust decoder and encoder.
+# MEASURED on a 7008-pixel frame, one core: 38 ms against 99 ms.
+#
+# It is opt-in because it is the one part of this app that is not plain Rust.
+# Without either feature the app builds anywhere with nothing installed, and
+# is simply slower at making previews it has not made before.
+#
+#   turbo         builds libjpeg-turbo from source. Needs CMake, and NASM on
+#                 Intel and AMD machines. The one to use on Windows and Linux.
+#   turbo-system  uses a libjpeg-turbo already installed, found by pkg-config.
+#                 The one to use on a Mac with Homebrew's `jpeg-turbo`.
+turbo = ["dep:turbojpeg", "turbojpeg/cmake", "turbojpeg/require-simd"]
+turbo-system = ["dep:turbojpeg", "turbojpeg/pkg-config"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-dialog = "2"
+rayon = "1.12.0"
+jpeg-decoder = "0.3.2"
+fast_image_resize = "6.1.0"
+jpeg-encoder = "0.7.1"
+regex = "1.13.1"
+memmap2 = "0.9.11"
+memchr = "2.8.3"
+trash = "5.2.9"
+percent-encoding = "2.3.2"
+xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
+png = "0.18.1"
+turbojpeg = { version = "1.5.1", default-features = false, optional = true }
+tauri-plugin-window-state = "2"
+ort = "=2.0.0-rc.13"
+ndarray = "0.17.2"
+
+
+[dev-dependencies]
+# Only for `examples/bench.rs`, which measures it against the decoder the app
+# ships with. Kept so the comparison can be re-run rather than taken on trust.
+zune-jpeg = "0.5.15"
+
+# Decoding and resizing JPEGs is this app's hot path, and it lives in the
+# dependencies. Unoptimised, a dev build decodes a preview roughly ten times
+# slower than the release build does, which makes every judgement about how the
+# app feels wrong while developing it. Dependencies are always built fast; only
+# this crate's own code stays quick to recompile.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

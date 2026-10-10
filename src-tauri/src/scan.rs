@@ -1,0 +1,363 @@
+//! Listing a folder and deciding what in it is a photo.
+
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
+
+use serde::Serialize;
+
+use crate::raw::{extension, JPEG_EXTENSIONS, RAW_EXTENSIONS};
+
+/// Everything the scan treats as a photo. HEIC is absent on purpose: nothing
+/// portable decodes it, and listing files that then draw as blank cells is
+/// worse than leaving them out.
+pub(crate) fn is_image(ext: &str) -> bool {
+    RAW_EXTENSIONS.contains(&ext) || JPEG_EXTENSIONS.contains(&ext) || ext == "png"
+}
+
+/// One photo as the scan found it.
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Scanned {
+    /// The file that owns the photo's marks and sidecar.
+    pub path: PathBuf,
+    /// The file drawn for it. For a RAW with a JPEG of the same name beside
+    /// it, the JPEG; otherwise the file itself.
+    pub display: PathBuf,
+    pub name: String,
+    /// Folders between the opened folder and this photo, e.g. `100MSDCF`.
+    /// `None` for a photo sitting directly in the folder that was opened.
+    pub subpath: Option<String>,
+    /// Changes whenever the drawn file does. Part of every preview's address,
+    /// so a file edited or replaced on disk is never shown from a stale cache.
+    pub version: String,
+    pub size: u64,
+    /// When the owning file was last changed, in milliseconds. With its size,
+    /// how anything remembered about the file knows whether it still applies.
+    pub modified: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanResult {
+    pub images: Vec<Scanned>,
+    /// Folders sitting directly inside the one opened. Only there to explain
+    /// why a folder that looks full came up empty.
+    pub subfolder_count: usize,
+}
+
+/// Folders that are really single documents. Walking into a Photos library or
+/// an app turns up tens of thousands of files that are not the photographer's
+/// to cull.
+const PACKAGES: &[&str] = &["app", "photoslibrary", "lrdata", "lrlibrary", "bundle", "framework", "cocatalog"];
+
+pub(crate) fn hidden(name: &str) -> bool {
+    name.starts_with('.')
+}
+
+/// Compares the way a file browser does: runs of digits by their value, and
+/// letters without regard to case, so `IMG_9.ARW` comes before `IMG_10.ARW`.
+pub fn natural_cmp(a: &str, b: &str) -> Ordering {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let (mut i, mut j) = (0, 0);
+    while i < a.len() && j < b.len() {
+        if a[i].is_ascii_digit() && b[j].is_ascii_digit() {
+            let (si, sj) = (i, j);
+            while i < a.len() && a[i].is_ascii_digit() {
+                i += 1;
+            }
+            while j < b.len() && b[j].is_ascii_digit() {
+                j += 1;
+            }
+            // Leading zeroes do not make a number bigger.
+            let da = a[si..i].iter().skip_while(|&&c| c == b'0').copied().collect::<Vec<_>>();
+            let db = b[sj..j].iter().skip_while(|&&c| c == b'0').copied().collect::<Vec<_>>();
+            let by_value = da.len().cmp(&db.len()).then_with(|| da.cmp(&db));
+            if by_value != Ordering::Equal {
+                return by_value;
+            }
+        } else {
+            let (ca, cb) = (a[i].to_ascii_lowercase(), b[j].to_ascii_lowercase());
+            if ca != cb {
+                return ca.cmp(&cb);
+            }
+            i += 1;
+            j += 1;
+        }
+    }
+    (a.len() - i).cmp(&(b.len() - j)).then_with(|| a.cmp(b))
+}
+
+struct Found {
+    path: PathBuf,
+    ext: String,
+    size: u64,
+    modified: u128,
+}
+
+fn list(dir: &Path, recurse: bool, out: &mut Vec<Found>, subfolders: Option<&mut usize>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let mut dirs = Vec::new();
+    let mut count = 0usize;
+
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if hidden(name) {
+            continue;
+        }
+        let Ok(kind) = entry.file_type() else { continue };
+        let path = entry.path();
+        // A symlink is followed for what it points at, so a shoot linked in
+        // from another drive opens like any other.
+        let is_dir = if kind.is_symlink() { path.is_dir() } else { kind.is_dir() };
+
+        if is_dir {
+            count += 1;
+            if recurse && !PACKAGES.contains(&extension(&path).as_str()) {
+                dirs.push(path);
+            }
+            continue;
+        }
+
+        let ext = extension(&path);
+        if !is_image(&ext) {
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else { continue };
+        let modified = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        out.push(Found { path, ext, size: meta.len(), modified });
+    }
+
+    if let Some(total) = subfolders {
+        *total = count;
+    }
+    for sub in dirs {
+        list(&sub, true, out, None);
+    }
+}
+
+/// Lists `folder` and pairs each RAW with its JPEG.
+///
+/// With `include_subfolders` it descends the whole tree, so a shoot split
+/// across a card's own folders — 100MSDCF, 101MSDCF — culls as one.
+pub fn scan_folder(folder: &Path, include_subfolders: bool) -> ScanResult {
+    let mut found = Vec::new();
+    let mut subfolder_count = 0;
+    list(folder, include_subfolders, &mut found, Some(&mut subfolder_count));
+
+    // Pair only exact, case-insensitive base names **within one folder**:
+    // IMG_1234.ARW + IMG_1234.JPG. The folder has to be part of the key.
+    // Cameras restart numbering at 0001 in every card folder, so keyed on the
+    // bare name a scan spanning subfolders pairs a RAW with a same-numbered
+    // JPEG from a different day's shooting.
+    let key = |p: &Path| -> (PathBuf, String) {
+        (
+            p.parent().map(Path::to_path_buf).unwrap_or_default(),
+            p.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_lowercase(),
+        )
+    };
+
+    let mut jpeg_for: HashMap<(PathBuf, String), usize> = HashMap::new();
+    for (i, f) in found.iter().enumerate() {
+        if JPEG_EXTENSIONS.contains(&f.ext.as_str()) {
+            jpeg_for
+                .entry(key(&f.path))
+                // Deterministic if both .jpg and .jpeg somehow exist.
+                .and_modify(|existing| {
+                    if natural_cmp(&name_of(&f.path), &name_of(&found[*existing].path)) == Ordering::Less {
+                        *existing = i;
+                    }
+                })
+                .or_insert(i);
+        }
+    }
+
+    let paired: HashSet<usize> = found
+        .iter()
+        .filter(|f| RAW_EXTENSIONS.contains(&f.ext.as_str()))
+        .filter_map(|f| jpeg_for.get(&key(&f.path)).copied())
+        .collect();
+
+    let mut images: Vec<Scanned> = Vec::with_capacity(found.len());
+    for (i, f) in found.iter().enumerate() {
+        if paired.contains(&i) {
+            continue; // shown through its RAW
+        }
+        let shown = if RAW_EXTENSIONS.contains(&f.ext.as_str()) {
+            jpeg_for.get(&key(&f.path)).map(|&j| &found[j]).unwrap_or(f)
+        } else {
+            f
+        };
+        let subpath = f
+            .path
+            .parent()
+            .and_then(|p| p.strip_prefix(folder).ok())
+            .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+            .filter(|rel| !rel.is_empty());
+        images.push(Scanned {
+            path: f.path.clone(),
+            display: shown.path.clone(),
+            name: name_of(&f.path),
+            subpath,
+            version: format!("{:x}-{:x}", shown.modified, shown.size),
+            size: f.size,
+            modified: f.modified as u64,
+        });
+    }
+
+    // Folder first, then name — not the file's date. Cameras number frames in
+    // the order they were shot, so the name tracks capture time; a file's date
+    // only records when it was copied, and an offload that writes the last
+    // frame first leaves those running backwards. Whole folders stay together
+    // because frame numbers restart in each one.
+    images.sort_by(|a, b| {
+        natural_cmp(a.subpath.as_deref().unwrap_or(""), b.subpath.as_deref().unwrap_or(""))
+            .then_with(|| natural_cmp(&a.name, &b.name))
+    });
+
+    ScanResult { images, subfolder_count }
+}
+
+fn name_of(path: &Path) -> String {
+    path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string()
+}
+
+/// A few photos to stand for a folder on the home screen: spread across it
+/// rather than the first few, which in a real shoot are test frames of a
+/// wall. Looks one level down when the folder itself holds none, since a card
+/// keeps its photos in a folder of its own.
+pub fn cover_images(folder: &Path, count: usize) -> Vec<Scanned> {
+    let mut images = scan_folder(folder, false).images;
+    if images.is_empty() {
+        if let Ok(entries) = std::fs::read_dir(folder) {
+            let mut subs: Vec<PathBuf> = entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_dir() && !hidden(&name_of(p)))
+                .collect();
+            subs.sort_by(|a, b| natural_cmp(&name_of(a), &name_of(b)));
+            for sub in subs.into_iter().take(8) {
+                images = scan_folder(&sub, false).images;
+                if !images.is_empty() {
+                    break;
+                }
+            }
+        }
+    }
+    if images.len() <= count {
+        return images;
+    }
+    let step = images.len() as f64 / count as f64;
+    (0..count).map(|i| images[(i as f64 * step) as usize].clone()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch(name: &str, files: &[&str]) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("opencull-scan-{}-{name}", std::process::id()));
+        std::fs::remove_dir_all(&dir).ok();
+        for f in files {
+            let path = dir.join(f);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"x").unwrap();
+        }
+        dir
+    }
+
+    fn names(result: &ScanResult) -> Vec<String> {
+        result
+            .images
+            .iter()
+            .map(|i| match &i.subpath {
+                Some(s) => format!("{s}/{}", i.name),
+                None => i.name.clone(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn numbers_sort_by_value_and_case_is_ignored() {
+        let mut v = vec!["IMG_10.ARW", "img_9.arw", "IMG_100.ARW", "IMG_2.ARW", "a.jpg", "B.jpg"];
+        v.sort_by(|a, b| natural_cmp(a, b));
+        assert_eq!(v, vec!["a.jpg", "B.jpg", "IMG_2.ARW", "img_9.arw", "IMG_10.ARW", "IMG_100.ARW"]);
+        assert_eq!(natural_cmp("A7V00099", "A7V00100"), Ordering::Less);
+        assert_eq!(natural_cmp("same", "same"), Ordering::Equal);
+    }
+
+    #[test]
+    fn a_raw_and_its_jpeg_are_one_photo_drawn_from_the_jpeg() {
+        let dir = scratch("pair", &["A7V00001.ARW", "A7V00001.JPG", "A7V00002.ARW", "A7V00003.JPG", "notes.txt"]);
+        let result = scan_folder(&dir, false);
+
+        assert_eq!(names(&result), vec!["A7V00001.ARW", "A7V00002.ARW", "A7V00003.JPG"]);
+        assert_eq!(result.images[0].display, dir.join("A7V00001.JPG"));
+        assert_eq!(result.images[1].display, dir.join("A7V00002.ARW"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn subfolders_are_counted_but_not_entered_unless_asked() {
+        let dir = scratch("subs", &["top.ARW", "100MSDCF/A.ARW", "101MSDCF/A.ARW", ".hidden/B.ARW"]);
+
+        let shallow = scan_folder(&dir, false);
+        assert_eq!(names(&shallow), vec!["top.ARW"]);
+        assert_eq!(shallow.subfolder_count, 2, "the hidden one does not count");
+
+        let deep = scan_folder(&dir, true);
+        assert_eq!(names(&deep), vec!["top.ARW", "100MSDCF/A.ARW", "101MSDCF/A.ARW"]);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_raw_is_never_paired_with_a_jpeg_from_another_folder() {
+        // Two card folders that both number from 0001. The JPEG in the second
+        // belongs to that folder's frame, not to the RAW in the first.
+        let dir = scratch("crossfolder", &["100MSDCF/A7V00001.ARW", "101MSDCF/A7V00001.JPG"]);
+        let result = scan_folder(&dir, true);
+
+        assert_eq!(names(&result), vec!["100MSDCF/A7V00001.ARW", "101MSDCF/A7V00001.JPG"]);
+        assert_eq!(result.images[0].display, dir.join("100MSDCF/A7V00001.ARW"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn whole_folders_stay_together_in_the_order_the_camera_wrote_them() {
+        let dir = scratch("order", &["101MSDCF/A7V00001.ARW", "100MSDCF/A7V09999.ARW", "100MSDCF/A7V09998.ARW"]);
+        let result = scan_folder(&dir, true);
+        assert_eq!(
+            names(&result),
+            vec!["100MSDCF/A7V09998.ARW", "100MSDCF/A7V09999.ARW", "101MSDCF/A7V00001.ARW"]
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_folder_named_like_a_photo_is_not_a_photo_and_packages_are_not_entered() {
+        let dir = scratch("oddities", &["Selects.jpg/real.ARW", "Library.photoslibrary/originals/x.ARW"]);
+        let result = scan_folder(&dir, true);
+        assert_eq!(names(&result), vec!["Selects.jpg/real.ARW"]);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_cover_looks_one_level_down_and_spreads_across_the_shoot() {
+        let files: Vec<String> = (0..20).map(|i| format!("DCIM/100MSDCF/A{i:02}.ARW")).collect();
+        let refs: Vec<&str> = files.iter().map(String::as_str).collect();
+        let dir = scratch("cover", &refs);
+
+        assert!(cover_images(&dir, 4).is_empty(), "two levels down is further than it looks");
+        let cover = cover_images(&dir.join("DCIM"), 4);
+        let picked: Vec<_> = cover.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(picked, vec!["A00.ARW", "A05.ARW", "A10.ARW", "A15.ARW"]);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}

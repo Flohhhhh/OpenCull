@@ -1,0 +1,57 @@
+// Runs face analysis over the open folder, in the background.
+
+import { useEffect, useRef } from "react";
+
+import { api } from "./api";
+import { useStore } from "./store";
+
+/**
+ * Keeps the open folder analysed.
+ *
+ * Starts once the folder's details are in — bursts are not known before
+ * that, and a rank needs its burst. Works outward from the photo on screen,
+ * so the frames about to be looked at are the first to have their faces.
+ * Stepping through photos restarts nothing; a different folder, or the
+ * switch being turned back on, does.
+ */
+export function useFaceScan(): void {
+  // A self-test decides for itself what is analysed and when.
+  const enabled = useStore((s) => s.aiEnabled && !s.selfTest);
+  const session = useStore((s) => (s.session !== null && s.metaProgress >= 1 ? s.session.id : null));
+  const pause = useStore((s) => s.aiPause);
+
+  useEffect(() => void api.aiSetYield(pause).catch(() => {}), [pause]);
+
+  // What counts as a group has changed: compare what is already analysed
+  // again, under the new rule. Nothing is analysed again for this.
+  const smart = useStore((s) => s.smartGroups);
+  const was = useRef(smart);
+  useEffect(() => {
+    if (was.current === smart) return;
+    was.current = smart;
+    useStore.getState().regroup();
+  }, [smart]);
+
+  useEffect(() => {
+    if (!enabled || session === null) return;
+    const { order, current, photos } = useStore.getState();
+    if (photos.length === 0) return;
+    const here = Math.max(0, order.indexOf(current));
+    const nearest = order.map((index, place) => ({ index, far: Math.abs(place - here) })).sort((a, b) => a.far - b.far).map((o) => o.index);
+
+    useStore.setState({ aiRunning: true });
+    void api
+      .aiScan(session, nearest, (event) => {
+        const s = useStore.getState();
+        if (s.session?.id !== session) return; // a folder since closed
+        if (event.type === "batch") s.addAnalysis(event.items);
+        else s.set("aiRunning", false);
+      })
+      .catch(() => useStore.getState().session?.id === session && useStore.setState({ aiRunning: false }));
+
+    return () => {
+      void api.aiStop().catch(() => {});
+      if (useStore.getState().session?.id === session) useStore.setState({ aiRunning: false });
+    };
+  }, [enabled, session]);
+}

@@ -1,0 +1,55 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Rust build output
+src-tauri/target
+src-tauri/gen/schemas
+
+# Photographs never go in the repository — not as test files, not by accident.
+*.arw
+*.ARW
+*.nef
+*.NEF
+*.cr2
+*.CR2
+*.cr3
+*.CR3
+*.raf
+*.RAF
+*.dng
+*.DNG
+*.rw2
+*.RW2
+*.orf
+*.ORF
+*.pef
+*.PEF
+*.srw
+*.SRW
+*.jpg
+*.JPG
+*.jpeg
+*.JPEG
+*.xmp

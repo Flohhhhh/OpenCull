@@ -1,0 +1,126 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    /* The system's own face, as the Mac app uses, rather than one shipped in. */
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* One look, and it is dark. A culling app is used for hours at a stretch
+   beside photographs, and a bright interface changes how every one of them
+   reads. The values are the Mac app's, so the two look like one program. */
+:root {
+    --background: #14141a;
+    --foreground: #f2f2f2;
+    --card: #1f1f1f;
+    --card-foreground: #f2f2f2;
+    --popover: #1c1c24;
+    --popover-foreground: #ededed;
+    --primary: #59a6ff;
+    --primary-foreground: #0b1220;
+    --secondary: #2e2e2e;
+    --secondary-foreground: #f2f2f2;
+    --muted: #26262e;
+    --muted-foreground: #8c8c8c;
+    --accent: #2a2a36;
+    --accent-foreground: #f2f2f2;
+    --destructive: #f27373;
+    --border: #2e2e2e;
+    --input: #3a3a44;
+    --ring: #59a6ff;
+    --radius: 0.5rem;
+
+    /* The app's own surfaces and marks. */
+    --opencull-canvas: #14141a;
+    --opencull-toolbar: #1c1c24;
+    --opencull-strip: #121217;
+    --opencull-panel: #17171f;
+    --opencull-cell: #242424;
+    --opencull-accent: #59a6ff;
+    --opencull-select: #409eff;
+    --opencull-star: #ffcc33;
+    --opencull-reject: #e66b6b;
+
+    --opencull-red: #e64040;
+    --opencull-yellow: #f2c726;
+    --opencull-green: #33cc59;
+    --opencull-blue: #338cf2;
+    --opencull-purple: #a64df2;
+}
+
+@theme inline {
+    --color-canvas: var(--opencull-canvas);
+    --color-toolbar: var(--opencull-toolbar);
+    --color-strip: var(--opencull-strip);
+    --color-panel: var(--opencull-panel);
+    --color-cell: var(--opencull-cell);
+    --color-brand: var(--opencull-accent);
+    --color-select: var(--opencull-select);
+    --color-star: var(--opencull-star);
+    --color-reject: var(--opencull-reject);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+    }
+  html {
+    @apply font-sans;
+    }
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+    }
+  body {
+    /* An app, not a page: nothing selects by accident, nothing rubber-bands. */
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+    overscroll-behavior: none;
+    }
+  img {
+    -webkit-user-drag: none;
+    }
+}
+
+/* Thin, quiet scrollbars that match the dark surfaces on every platform. */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #3a3a44 transparent;
+}

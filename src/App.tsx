@@ -1,0 +1,106 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { CullingView } from "@/components/cull/CullingView";
+import { NoticeDialog, SettingsDialog, ShortcutsDialog, TrashDialog } from "@/components/cull/Dialogs";
+import { ShipDialog } from "@/components/cull/ShipDialog";
+import { IngestView } from "@/components/ingest/IngestView";
+import { HomeView } from "@/components/home/HomeView";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { api, inTauri } from "@/lib/api";
+import { installShortcuts, loadBindings, saveBindings, type Action, type Combo } from "@/lib/shortcuts";
+import { useStore } from "@/lib/store";
+
+export default function App() {
+  const open = useStore((s) => s.session !== null);
+  const ingesting = useStore((s) => s.ingestOpen);
+  const [bindings, setBindings] = useState(loadBindings);
+  const [dropping, setDropping] = useState(false);
+
+  // Read through refs by the key listener, which is attached once and must
+  // still see a shortcut changed a moment ago.
+  const live = useRef(bindings);
+  live.current = bindings;
+  const recording = useRef(false);
+
+  useEffect(() => {
+    void useStore.getState().init();
+    return installShortcuts(
+      () => live.current,
+      () => recording.current,
+    );
+  }, []);
+
+  const changeBindings = useCallback((next: Record<Action, Combo>) => {
+    setBindings(next);
+    saveBindings(next);
+  }, []);
+  const setRecording = useCallback((on: boolean) => {
+    recording.current = on;
+  }, []);
+
+  // A folder dropped on the window opens. The system hands over paths, which
+  // a web page on its own is never told, so this goes through the app shell.
+  useEffect(() => {
+    if (!inTauri) return;
+    let stop: (() => void) | undefined;
+    let cancelled = false;
+    void import("@tauri-apps/api/webview").then(({ getCurrentWebview }) =>
+      getCurrentWebview()
+        .onDragDropEvent((event) => {
+          const { type } = event.payload;
+          if (type === "enter" || type === "over") setDropping(true);
+          else setDropping(false);
+          if (type === "drop" && event.payload.paths[0]) void useStore.getState().openFolder(event.payload.paths[0]);
+        })
+        .then((unlisten) => {
+          if (cancelled) unlisten();
+          else stop = unlisten;
+        }),
+    );
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, []);
+
+  // Quitting is refused while photos are coming off a card. Say why, or it
+  // looks as though the app has stopped listening.
+  useEffect(
+    () =>
+      api.onQuitRefused(() =>
+        useStore.getState().set("notice", {
+          title: "Photos are still being copied",
+          body: "Quitting now would leave part of the shoot uncopied. Wait for the copy to finish, or press Cancel Copy first — the photo in hand is finished either way.",
+        }),
+      ),
+    [],
+  );
+
+  // Anything that goes wrong in the interface is reported to the app's log,
+  // where it can be read without opening developer tools.
+  useEffect(() => {
+    const onError = (e: ErrorEvent) => api.report(`error: ${e.message} (${e.filename}:${e.lineno})`);
+    const onRejection = (e: PromiseRejectionEvent) => api.report(`unhandled: ${String(e.reason)}`);
+    const onBlocked = (e: SecurityPolicyViolationEvent) => api.report(`blocked by policy: ${e.violatedDirective} ${e.blockedURI}`);
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    document.addEventListener("securitypolicyviolation", onBlocked);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+      document.removeEventListener("securitypolicyviolation", onBlocked);
+    };
+  }, []);
+
+  return (
+    <TooltipProvider delayDuration={500}>
+      {open ? <CullingView /> : <HomeView dropping={dropping} />}
+      {ingesting && <IngestView />}
+      <TrashDialog />
+      <SettingsDialog />
+      <ShipDialog />
+      <NoticeDialog />
+      <ShortcutsDialog bindings={bindings} onChange={changeBindings} onRecording={setRecording} />
+    </TooltipProvider>
+  );
+}
