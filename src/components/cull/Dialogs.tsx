@@ -235,7 +235,7 @@ function SettingsBody({ tab, onTab }: { tab: SettingsTab; onTab: (tab: SettingsT
     }
   };
 
-  const toggle = (key: "speedCullAlways" | "showRatingBar" | "keepZoom" | "instantZoom" | "rgbHistogram" | "warmAhead" | "aiEnabled" | "showBackgroundFaces" | "aiPause" | "smartGroups") => (
+  const toggle = (key: "speedCullAlways" | "showRatingBar" | "keepZoom" | "instantZoom" | "rgbHistogram" | "warmAhead" | "aiEnabled" | "showBackgroundFaces" | "aiPause" | "smartGroups" | "embedInJpeg") => (
     <Switch checked={s[key]} onCheckedChange={(on) => set(key, on)} />
   );
   const boxKey = isMac ? "⌘ Command" : "Ctrl";
@@ -297,6 +297,11 @@ function SettingsBody({ tab, onTab }: { tab: SettingsTab; onTab: (tab: SettingsT
                 ))}
               </div>
             }
+          />
+          <Setting
+            title="Write ratings into JPEGs"
+            detail="Stores a JPEG's stars and colour label inside the file itself as well as beside it, which is where Lightroom, Bridge and others look. Only the file's information is changed, never the picture. Turn off to leave JPEG files exactly as they are."
+            control={toggle("embedInJpeg")}
           />
           <Setting
             title="Include subfolders"

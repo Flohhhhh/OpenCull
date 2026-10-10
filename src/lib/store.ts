@@ -65,6 +65,8 @@ interface State {
   includeSubfolders: boolean;
   /** Which of a folder's files are shown as its photos. */
   fileKinds: FileKinds;
+  /** Write a JPEG's marks into the file itself, as well as beside it. */
+  embedInJpeg: boolean;
   /** Move on to the next photo after marking one. Follows Caps Lock. */
   speedCull: boolean;
   /** The same, left on whatever Caps Lock is doing. */
@@ -285,6 +287,7 @@ const PERSISTED = [
   "filmstripHeight",
   "includeSubfolders",
   "fileKinds",
+  "embedInJpeg",
   "warmAhead",
   "speedCullAlways",
   "keepZoom",
@@ -370,7 +373,11 @@ export const useStore = create<Store>((set, get) => {
     }
     if (edit.length === 0) return;
 
-    void api.setMarks(edit.map((e) => ({ path: photos[e.index].path, ...e.after })));
+    // A JPEG keeps its marks inside itself, where other programs look for
+    // them: the photo's own file if it is one, and the JPEG it is drawn from
+    // if it is a RAW with one beside it.
+    const jpegs = (p: Photo) => (s.embedInJpeg ? [...new Set([p.path, p.display])].filter((file) => /\.jpe?g$/i.test(file)) : []);
+    void api.setMarks(edit.map((e) => ({ path: photos[e.index].path, into: jpegs(photos[e.index]), ...e.after })));
     set({
       photos,
       // A photo that no longer passes the filter leaves the view at once,
@@ -542,6 +549,7 @@ export const useStore = create<Store>((set, get) => {
     stripResizing: false,
     includeSubfolders: load("includeSubfolders", false),
     fileKinds: load<FileKinds>("fileKinds", "both"),
+    embedInJpeg: load("embedInJpeg", true),
     speedCull: false,
     speedCullAlways: load("speedCullAlways", false),
     keepZoom: load("keepZoom", true),

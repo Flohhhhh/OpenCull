@@ -31,6 +31,12 @@ pub struct Scanned {
     pub subpath: Option<String>,
     /// Changes whenever the drawn file does. Part of every preview's address,
     /// so a file edited or replaced on disk is never shown from a stale cache.
+    ///
+    /// It is the file's date and not also its size: a rating written into a
+    /// JPEG can make the file a little longer without changing the picture,
+    /// and its date is put back afterwards. Counting the size made every
+    /// photo rated in a sitting a stranger the next time its folder opened,
+    /// with its previews to make and its faces to find all over again.
     pub version: String,
     pub size: u64,
     /// When the owning file was last changed, in milliseconds. With its size,
@@ -246,7 +252,7 @@ pub fn scan_folder_of(folder: &Path, include_subfolders: bool, kinds: Kinds) -> 
             display: shown.path.clone(),
             name: name_of(&f.path),
             subpath,
-            version: format!("{:x}-{:x}", shown.modified, shown.size),
+            version: format!("{:x}", shown.modified),
             size: f.size,
             modified: f.modified as u64,
         });

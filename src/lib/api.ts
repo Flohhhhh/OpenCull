@@ -116,7 +116,8 @@ export interface Backend {
   /** Prepares a long run of loupe previews on spare time. Resolves to how many there are to make. */
   warm(items: { path: string; version: string }[], size: number): Promise<number>;
   warmRemaining(): Promise<number>;
-  setMarks(changes: ({ path: string } & Marks)[]): Promise<void>;
+  /** Records marks beside each photo, and inside each of the JPEGs named in `into`. */
+  setMarks(changes: ({ path: string; into: string[] } & Marks)[]): Promise<void>;
   flushMarks(): Promise<void>;
   moveToTrash(items: { path: string; display: string }[]): Promise<string[]>;
   /** Copies or moves photos, with their JPEGs and ratings, to another folder. Never replaces anything there. */
@@ -153,6 +154,8 @@ export interface Backend {
   ingestCancel(): Promise<void>;
   /** Calls `handler` when quitting was refused because a copy is running. Returns a way to stop listening. */
   onQuitRefused(handler: () => void): () => void;
+  /** Calls `handler` when marks could not be written into a JPEG: the file, and why. */
+  onJpegNotWritten(handler: (path: string, why: string) => void): () => void;
   histogram(path: string, version: string): Promise<Histogram>;
   folderCover(path: string): Promise<Scanned[]>;
   foldersExist(paths: string[]): Promise<boolean[]>;
@@ -224,6 +227,20 @@ const tauri: Backend = {
     return invoke("ingest_copy", { items, destination, policy, progress });
   },
   ingestCancel: () => invoke("ingest_cancel"),
+  onJpegNotWritten: (handler) => {
+    let stop: (() => void) | undefined;
+    let stopped = false;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen<[string, string]>("jpeg-not-written", (event) => handler(event.payload[0], event.payload[1])).then((unlisten) => {
+        if (stopped) unlisten();
+        else stop = unlisten;
+      }),
+    );
+    return () => {
+      stopped = true;
+      stop?.();
+    };
+  },
   onQuitRefused: (handler) => {
     let stop: (() => void) | null = null;
     let stopped = false;

@@ -451,6 +451,10 @@ pub fn warm_remaining(app: AppState) -> usize {
 #[derive(Deserialize)]
 pub struct MarkChange {
     path: String,
+    /// The photo's JPEGs, which are to hold the marks inside themselves as
+    /// well. None, for a photo with no JPEG or when that is turned off.
+    #[serde(default)]
+    into: Vec<String>,
     #[serde(flatten)]
     marks: Marks,
 }
@@ -460,7 +464,7 @@ pub struct MarkChange {
 #[tauri::command]
 pub fn set_marks(app: AppState, changes: Vec<MarkChange>) {
     for change in changes {
-        app.writer.enqueue(PathBuf::from(change.path), change.marks);
+        app.writer.enqueue_with(PathBuf::from(change.path), change.marks, change.into.into_iter().map(PathBuf::from).collect());
     }
 }
 

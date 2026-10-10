@@ -147,6 +147,59 @@ pub fn xmp_packet(src: &dyn ReadAt, start: u64, end: u64) -> Option<String> {
     None
 }
 
+/// Where the things are that writing into a JPEG's header has to know of.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Layout {
+    /// The XMP packet: where its segment starts (the marker), where the
+    /// packet's own text starts, and how long that text is.
+    pub xmp: Option<(u64, u64, usize)>,
+    /// Where a new segment goes if there is none: after the leading JFIF and
+    /// EXIF blocks, ahead of everything else.
+    pub insert_at: u64,
+    /// A multi-picture index, if the file has one: where its segment starts.
+    /// It finds the file's other pictures by how far they are from itself,
+    /// so nothing after it may grow or shrink.
+    pub index_at: Option<u64>,
+}
+
+/// Reads a JPEG's header for where its XMP is and where one could go.
+/// `None` for something that is not a JPEG.
+pub fn layout(src: &dyn ReadAt) -> Option<Layout> {
+    let all = segments(src, 0, src.size());
+    if all.is_empty() {
+        return None;
+    }
+    let mut found = Layout { xmp: None, insert_at: 2, index_at: None };
+    let mut leading = true;
+    for seg in &all {
+        let starts_with = |header: &[u8]| seg.len >= header.len() && src.read_at(seg.payload, header.len()).as_deref() == Some(header);
+        let start = seg.payload - 4;
+        if leading && (seg.marker == 0xE0 || (seg.marker == 0xE1 && starts_with(EXIF_HEADER))) {
+            found.insert_at = seg.payload + seg.len as u64;
+        } else {
+            leading = false;
+        }
+        if seg.marker == 0xE1 && found.xmp.is_none() && seg.len > XMP_HEADER.len() && starts_with(XMP_HEADER) {
+            found.xmp = Some((start, seg.payload + XMP_HEADER.len() as u64, seg.len - XMP_HEADER.len()));
+        }
+        if seg.marker == 0xE2 && found.index_at.is_none() && starts_with(b"MPF\0") {
+            found.index_at = Some(start);
+        }
+    }
+    Some(found)
+}
+
+/// A whole XMP segment, marker and all, holding `packet`. `None` if the
+/// packet is too long for one segment to hold.
+pub fn xmp_segment(packet: &[u8]) -> Option<Vec<u8>> {
+    let len = u16::try_from(2 + XMP_HEADER.len() + packet.len()).ok()?;
+    let mut out = vec![0xFF, 0xE1];
+    out.extend_from_slice(&len.to_be_bytes());
+    out.extend_from_slice(XMP_HEADER);
+    out.extend_from_slice(packet);
+    Some(out)
+}
+
 const ICC_HEADER: &[u8] = b"ICC_PROFILE\0";
 
 /// The colour profile a JPEG carries, reassembled from however many segments

@@ -190,6 +190,7 @@ export const mock: Backend = {
   },
   ingestCancel: () => later(undefined),
   onQuitRefused: () => () => {},
+  onJpegNotWritten: () => () => {},
   histogram: (path) => {
     const seed = path.length;
     const bell = (centre: number) => Array.from({ length: 256 }, (_, x) => Math.round(900 * Math.exp(-((x - centre) ** 2) / 2600)));
