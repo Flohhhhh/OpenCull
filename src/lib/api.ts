@@ -132,6 +132,8 @@ export interface Backend {
   pathsExist(paths: string[]): Promise<boolean[]>;
   /** Finds and judges faces, `order` first to last; photos done before come at once. Asking again stops the last asking. */
   aiScan(session: number, order: number[], onEvent: (e: AiEvent) => void): Promise<void>;
+  /** Tells the scan now running which photos are being looked at, nearest first: it analyses those before the rest. */
+  aiLookAt(order: number[]): Promise<void>;
   /**
    * Marks photos against the others of the same pose. Each run is photos
    * taken one soon after another, in the order they were shot; the backend
@@ -208,6 +210,7 @@ const tauri: Backend = {
     return invoke("ai_scan", { session, order, events });
   },
   aiCompare: (runs, poses) => invoke("ai_compare", { runs, poses }),
+  aiLookAt: (order) => invoke("ai_look_at", { order }),
   aiStop: () => invoke("ai_stop"),
   aiSetYield: (on) => invoke("ai_set_yield", { on }),
   aiCacheUsage: () => invoke("ai_cache_usage"),

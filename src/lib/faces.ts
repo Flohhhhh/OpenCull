@@ -5,6 +5,15 @@ import { useEffect, useRef } from "react";
 import { api } from "./api";
 import { useStore } from "./store";
 
+/** How many photos either side of the one on screen the scan is asked to do first. */
+const LOOK_REACH = 16;
+/**
+ * How long a photo is rested on before the scan is pointed at it. A held
+ * arrow key passes thirty photos a second, and none of those is being
+ * looked at.
+ */
+const LOOK_SETTLE_MS = 120;
+
 /**
  * Keeps the open folder analysed.
  *
@@ -12,7 +21,9 @@ import { useStore } from "./store";
  * that, and a rank needs its burst. Works outward from the photo on screen,
  * so the frames about to be looked at are the first to have their faces.
  * Stepping through photos restarts nothing; a different folder, or the
- * switch being turned back on, does.
+ * switch being turned back on, does. Moving somewhere the scan has not
+ * reached points it there: that photo and the ones round it are done next,
+ * and it then carries on where it was.
  */
 export function useFaceScan(): void {
   // A self-test decides for itself what is analysed and when.
@@ -31,6 +42,35 @@ export function useFaceScan(): void {
     was.current = smart;
     useStore.getState().regroup();
   }, [smart]);
+
+  // Listened for rather than read as the rest are: this runs on every photo
+  // stepped to, and must not redraw the workspace each time.
+  useEffect(() => {
+    if (!enabled || session === null) return;
+    let timer: number | undefined;
+    let last = useStore.getState().current;
+    const look = () => {
+      const s = useStore.getState();
+      if (s.session?.id !== session || !s.aiRunning || s.current < 0) return;
+      const at = s.view.indexOf(s.current);
+      const near = [s.current];
+      for (let d = 1; at >= 0 && d <= LOOK_REACH; d++) {
+        if (at + d < s.view.length) near.push(s.view[at + d]);
+        if (at - d >= 0) near.push(s.view[at - d]);
+      }
+      void api.aiLookAt(near.filter((index) => s.ai[index] === undefined)).catch(() => {});
+    };
+    const stop = useStore.subscribe((s) => {
+      if (s.current === last) return;
+      last = s.current;
+      window.clearTimeout(timer);
+      if (s.aiRunning) timer = window.setTimeout(look, LOOK_SETTLE_MS);
+    });
+    return () => {
+      stop();
+      window.clearTimeout(timer);
+    };
+  }, [enabled, session]);
 
   useEffect(() => {
     if (!enabled || session === null) return;

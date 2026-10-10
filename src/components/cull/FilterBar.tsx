@@ -81,6 +81,9 @@ export function FilterBar() {
         })}
       </Group>
       <Group>
+        <Cell count={counts.colors.none ?? 0} active={colorFilters.has("none")} title="No colour label" onClick={() => s.toggleColorFilter("none")}>
+          <span className={cn("size-3 rounded-full border-[1.5px]", colorFilters.has("none") ? "border-white" : "border-[#8c8c8c]")} />
+        </Cell>
         {COLORS.map((c) => (
           <Cell key={c} count={counts.colors[c] ?? 0} active={colorFilters.has(c)} title={c[0].toUpperCase() + c.slice(1)} onClick={() => s.toggleColorFilter(c)}>
             <span className="size-3 rounded-full" style={{ background: `var(--opencull-${c})` }} />

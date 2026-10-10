@@ -55,11 +55,39 @@ export function isHeld(url: string): boolean {
 
 // The full-size picture is a hundred megabytes and more once decoded, so only
 // one is ever held: the photo being looked at.
-let full: { url: string; img: HTMLImageElement } | null = null;
+let full: { url: string; img: HTMLImageElement; ready: boolean } | null = null;
+const watching = new Set<() => void>();
 
 /** Gets the full-size picture at `url` ready in place of the last one; `null` lets it go. */
 export function holdFull(url: string | null): void {
   if (full?.url === url) return;
-  if (full) release(full.img);
-  full = url ? { url, img: load(url, () => {}) } : null;
+  const was = full;
+  if (was) release(was.img);
+  full = null;
+  if (url) {
+    const mine = { url, img: null as unknown as HTMLImageElement, ready: false };
+    mine.img = load(url, () => {
+      if (full !== mine) return;
+      mine.ready = true;
+      watching.forEach((tell) => tell());
+    });
+    full = mine;
+  }
+  if (was?.ready) watching.forEach((tell) => tell());
+}
+
+/**
+ * Whether the full-size picture at `url` is the one held, and can be drawn
+ * this instant. Anything else that wants it — the face panel, for the small
+ * faces of a group — draws from it only while this is so, and so never
+ * fetches or decodes one of its own.
+ */
+export function isFullHeld(url: string): boolean {
+  return full?.url === url && full.ready;
+}
+
+/** Calls `tell` whenever the answer `isFullHeld` gives may have changed; returns how to stop. */
+export function watchFull(tell: () => void): () => void {
+  watching.add(tell);
+  return () => void watching.delete(tell);
 }

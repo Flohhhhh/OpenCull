@@ -163,6 +163,7 @@ pub fn run() {
             commands::ingest_copy,
             commands::ingest_cancel,
             commands::ai_scan,
+            commands::ai_look_at,
             commands::ai_compare,
             commands::ai_stop,
             commands::ai_set_yield,

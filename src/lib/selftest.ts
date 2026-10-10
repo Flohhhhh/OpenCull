@@ -169,6 +169,49 @@ export async function runSelfTest(folder: string): Promise<void> {
     await big.decode();
     say(`full-size picture decoded in the view in ${Math.round(performance.now() - t)} ms — the wait a zoom no longer has`);
 
+    // And what the face panel leans on for the small faces of a group: that
+    // picture, already decoded, drawn from again. Asking for it a second
+    // time must cost nothing, and cutting a panel's worth of faces out of it
+    // must take a small part of a frame — set beside the same cuts from the
+    // window-sized rendering, which is what the panel draws them from first.
+    //
+    // Timed on a photo the camera held level. The measure used here makes
+    // an upright copy of a turned photo before it cuts anything — MEASURED:
+    // 118 ms, once, for 25 megapixels — which drawing a picture in the
+    // panel does not do, so a turned photo would time the measure and not
+    // the panel.
+    const second = new Image();
+    second.src = big.src;
+    t = performance.now();
+    await second.decode();
+    const shared = performance.now() - t;
+    if (shared > 50) throw new Error(`a second use of the held full-size picture took ${Math.round(shared)} ms: it is being decoded again`);
+    const cuts = async (from: HTMLImageElement) => {
+      const began = performance.now();
+      for (let cell = 0; cell < 12; cell++) {
+        // A face with the air round it, a twelfth of the frame wide and
+        // somewhere different each time, made the size of a cell on a
+        // sharp screen.
+        const w = Math.round(from.naturalWidth * 0.08);
+        const piece = await createImageBitmap(from, Math.round(from.naturalWidth * (0.05 + 0.07 * cell)), Math.round(from.naturalHeight * (0.1 + 0.05 * cell)), w, Math.round(w * 1.1), { resizeWidth: 300, resizeHeight: 330 });
+        piece.close();
+      }
+      return performance.now() - began;
+    };
+    const level = photos.find((p) => p.fullWidth > p.fullHeight);
+    if (level) {
+      const [whole, sized] = [new Image(), new Image()];
+      whole.src = api.url("full", level);
+      sized.src = api.url("fit", level, size);
+      await Promise.all([whole.decode(), sized.decode()]);
+      const [fromFull, fromFit] = [await cuts(whole), await cuts(sized)];
+      say(`the held full-size picture asked for again was ready in ${shared.toFixed(1)} ms; twelve face-sized cuts from a ${whole.naturalWidth}x${whole.naturalHeight} picture in ${fromFull.toFixed(1)} ms, against ${fromFit.toFixed(1)} ms from the window-sized rendering`);
+      // MEASURED: 12 to 14 ms for the twelve, 2 to 3 from the rendering.
+      if (fromFull > 40) throw new Error(`cutting a panel of faces from the full-size picture took ${Math.round(fromFull)} ms, where 12 to 14 is usual`);
+    } else {
+      say(`the held full-size picture asked for again was ready in ${shared.toFixed(1)} ms; no level photo here to time cuts from`);
+    }
+
     // Copying photos out, the way the right-click menu and Ship do — into
     // this run's own temporary folder, which is deleted when it ends. Nothing
     // is moved, and nothing is opened in any editing program.
@@ -262,6 +305,9 @@ export async function runSelfTest(folder: string): Promise<void> {
       if (found.length !== some.length) throw new Error(`face analysis returned ${found.length} of ${some.length} photos`);
       if (bad) throw new Error(bad);
       if (again > first / 3 && again > 300) throw new Error("a second analysis was not served from memory");
+      // Pointing the scan at the photo being looked at: only that the
+      // route is there. What it does with it is tested where it lives.
+      await api.aiLookAt(some.slice(0, 3));
       // The frames of a burst marked against each other. Any run of photos
       // will do to show the route works; real bursts are not needed for that.
       const run = some.slice(0, 6).map((index) => ({ ...whole.get(index)!, time: s().photos[index].captureMs, burst: 1, upright: null }));

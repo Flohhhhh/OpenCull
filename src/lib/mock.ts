@@ -156,6 +156,7 @@ export const mock: Backend = {
         }),
       ),
     ),
+  aiLookAt: () => later(undefined),
   aiStop: () => later(undefined),
   aiSetYield: () => later(undefined),
   aiCacheUsage: () => later([2_400_000, 14] as [number, number]),

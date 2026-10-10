@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -62,6 +62,9 @@ pub struct App {
     ai_scan: AtomicU64,
     /// Whether analysis stands aside while the photographer is moving about.
     ai_yields: AtomicBool,
+    /// The photos being looked at now, nearest first: what the scan
+    /// analyses before carrying on with the rest of the folder.
+    ai_front: Mutex<Vec<usize>>,
 }
 
 impl App {
@@ -84,6 +87,7 @@ impl App {
             faces,
             ai_scan: AtomicU64::new(0),
             ai_yields: AtomicBool::new(true),
+            ai_front: Default::default(),
         }
     }
 }
@@ -634,6 +638,9 @@ pub async fn ai_scan(app: AppState<'_>, session: u64, order: Vec<usize>, events:
     };
     let app = app.inner().clone();
     let mine = app.ai_scan.fetch_add(1, Ordering::SeqCst) + 1;
+    // The order given starts from the photo on screen; whatever an earlier
+    // scan was told to look at first has nothing to say about this one.
+    app.ai_front.lock().unwrap().clear();
 
     tauri::async_runtime::spawn_blocking(move || {
         let wanted = || !session.closed.load(Ordering::SeqCst) && app.ai_scan.load(Ordering::SeqCst) == mine;
@@ -659,7 +666,7 @@ pub async fn ai_scan(app: AppState<'_>, session: u64, order: Vec<usize>, events:
         // few enough that the rest of the machine does not feel it.
         let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
         let workers = (cores / 2).clamp(1, 6).min(todo.len().max(1));
-        let next = AtomicUsize::new(0);
+        let queue = ai::queue::Queue::new(todo);
         let (tx, rx) = std::sync::mpsc::channel::<Analysed>();
         std::thread::scope(|scope| {
             for _ in 0..workers {
@@ -674,7 +681,9 @@ pub async fn ai_scan(app: AppState<'_>, session: u64, order: Vec<usize>, events:
                         if !wanted() {
                             return;
                         }
-                        let Some(&index) = todo.get(next.fetch_add(1, Ordering::SeqCst)) else { return };
+                        // What is being looked at now, then the rest.
+                        let front = app.ai_front.lock().unwrap().clone();
+                        let Some(index) = queue.take(&front) else { return };
                         let image = &session.images[index];
                         // A photo that cannot be analysed is remembered as
                         // having no faces, so it is not tried on every open.
@@ -716,7 +725,7 @@ pub async fn ai_scan(app: AppState<'_>, session: u64, order: Vec<usize>, events:
                 app.faces.save(&session.folder, &known.lock().unwrap());
             }
         });
-        events.send(AiEvent::Done { finished: next.load(Ordering::SeqCst) >= todo.len() && wanted() }).ok();
+        events.send(AiEvent::Done { finished: queue.exhausted() && wanted() }).ok();
     })
     .await
     .map_err(|e| e.to_string())
@@ -742,6 +751,13 @@ pub fn ai_compare(runs: Vec<Vec<RunFrame>>, poses: bool) -> Vec<Vec<ai::series::
     runs.iter()
         .map(|run| ai::series::compare_run(&run.iter().map(|f| ai::series::Frame { record: &f.record, time: f.time, burst: f.burst, upright: f.upright }).collect::<Vec<_>>(), poses))
         .collect()
+}
+
+/// Tells the scan now running which photos are being looked at, nearest
+/// first, so that it analyses those before the rest of the folder.
+#[tauri::command]
+pub fn ai_look_at(app: AppState, order: Vec<usize>) {
+    *app.ai_front.lock().unwrap() = order;
 }
 
 /// Stops the face scan now running.
