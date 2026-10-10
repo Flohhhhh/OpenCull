@@ -1,5 +1,12 @@
 {
   "build": {
-    "features": ["turbo-system"]
+    "features": [
+      "turbo-system"
+    ]
+  },
+  "bundle": {
+    "macOS": {
+      "signingIdentity": "-"
+    }
   }
 }
