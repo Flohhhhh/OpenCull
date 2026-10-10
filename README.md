@@ -83,9 +83,9 @@ deciding what to keep. OpenCull is built to make that fast.
 * **Start to finish.** Copy photos off a card, cull them, and hand the keepers
   to your editing program.
 
-**Status: early.** It is used daily on a Mac. The Windows and Linux versions
-build and pass their tests, but nobody has used them for real work yet. If
-you do, reports are very welcome, good or bad.
+**Status: early.** It is used daily on a Mac, and has been tested and
+confirmed working on Windows and Linux. If something goes wrong on your
+system, reports are very welcome.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
