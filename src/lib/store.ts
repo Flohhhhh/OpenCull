@@ -393,6 +393,19 @@ export const useStore = create<Store>((set, get) => {
     });
   }
 
+  /**
+   * Where undoing or redoing a step leaves the loupe: on the photo the step
+   * changed, so that what was just put back is what is being looked at. A
+   * step that changed many lands on the first of them as they are shown. It
+   * is gone to even if the filter hides it — it is what was asked about.
+   */
+  function backTo(edit: Edit): Partial<State> {
+    const { order, current } = get();
+    const touched = new Set(edit.map((e) => e.index));
+    const first = order.find((i) => touched.has(i));
+    return first === undefined || first === current ? {} : { current: first, anchor: first };
+  }
+
   /** The photos a keyboard mark lands on: just the one in the loupe. */
   function currentOnly(): number[] {
     const { current } = get();
@@ -848,7 +861,7 @@ export const useStore = create<Store>((set, get) => {
       const edit = s.undoStack[s.undoStack.length - 1];
       if (!edit) return;
       applyMarks(edit.map((e) => ({ index: e.index, after: e.before })), false);
-      set({ undoStack: s.undoStack.slice(0, -1), redoStack: [...s.redoStack, edit] });
+      set({ undoStack: s.undoStack.slice(0, -1), redoStack: [...s.redoStack, edit], ...backTo(edit) });
     },
 
     redo() {
@@ -856,7 +869,7 @@ export const useStore = create<Store>((set, get) => {
       const edit = s.redoStack[s.redoStack.length - 1];
       if (!edit) return;
       applyMarks(edit.map((e) => ({ index: e.index, after: e.after })), false);
-      set({ redoStack: s.redoStack.slice(0, -1), undoStack: [...s.undoStack, edit] });
+      set({ redoStack: s.redoStack.slice(0, -1), undoStack: [...s.undoStack, edit], ...backTo(edit) });
     },
 
     setFlagFilter(flagFilter) {
