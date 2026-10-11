@@ -131,7 +131,7 @@ export function FacePanel() {
   const grid = showing && size.w > 0 ? layout(Math.max(1, showing.faces.length), size.w, size.h) : null;
 
   return (
-    <aside className="flex w-[340px] shrink-0 flex-col border-l border-[#2a2a2a] bg-panel pt-3.5">
+    <aside className="flex h-full min-h-0 w-full flex-col bg-panel pt-3.5">
       <div ref={area} className={cn("min-h-0 flex-1", grid?.scrolls ? "overflow-y-auto" : "overflow-hidden")}>
         {showing && grid ? (
           <div className="flex flex-wrap content-start" style={{ gap: GAP, padding: `0 ${PAD}px ${PAD}px` }}>
