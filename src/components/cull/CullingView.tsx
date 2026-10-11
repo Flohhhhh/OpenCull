@@ -138,7 +138,7 @@ function PanelHandle({ panel, direction }: { panel: PanelWidth; direction: 1 | -
   // only when the pointer is on it.
   return (
     <div role="separator" aria-orientation="vertical" onPointerDown={onPointerDown} className="group relative z-10 w-px shrink-0 cursor-col-resize bg-[#333]">
-      <span className="absolute inset-y-0 -left-[3px] w-[7px] group-hover:bg-[#4d8cff]/60 group-active:bg-[#4d8cff]/60" />
+      <span className="absolute inset-y-0 -left-[2px] w-[5px] group-hover:bg-[#4d8cff]/60 group-active:bg-[#4d8cff]/60" />
     </div>
   );
 }
