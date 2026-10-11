@@ -45,7 +45,7 @@ export function CullingView() {
             {showExif && (
               <div
                 className="h-full min-h-0 shrink-0 overflow-hidden bg-panel"
-                style={{ width: exifPanelWidth }}
+                style={{ width: panelWidth("exifPanelWidth", exifPanelWidth) }}
               >
                 <ExifPanel />
               </div>
@@ -58,7 +58,7 @@ export function CullingView() {
             {showFaces && (
               <div
                 className="h-full min-h-0 shrink-0 overflow-hidden bg-panel"
-                style={{ width: facePanelWidth }}
+                style={{ width: panelWidth("facePanelWidth", facePanelWidth) }}
               >
                 <FacePanel />
               </div>
@@ -75,6 +75,11 @@ export function CullingView() {
   );
 }
 
+function panelWidth(panel: PanelWidth, width: number) {
+  const { min, max } = PANEL_LIMITS[panel];
+  return `clamp(${min * 100}%, ${width}px, ${max * 100}%)`;
+}
+
 function PanelHandle({
   panel,
   direction,
@@ -85,14 +90,17 @@ function PanelHandle({
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
     const startX = e.clientX;
-    const startWidth = useStore.getState()[panel];
     const containerWidth =
       target.parentElement?.clientWidth ?? window.innerWidth;
+    const { min, max } = PANEL_LIMITS[panel];
+    const startWidth = Math.max(
+      min * containerWidth,
+      Math.min(max * containerWidth, useStore.getState()[panel])
+    );
     target.setPointerCapture(e.pointerId);
     useStore.getState().set("panelResizing", true);
 
     const onMove = (ev: globalThis.PointerEvent) => {
-      const { min, max } = PANEL_LIMITS[panel];
       const width = Math.round(
         Math.max(
           min * containerWidth,
