@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::raw::{extension, JPEG_EXTENSIONS, RAW_EXTENSIONS};
 
@@ -31,6 +31,12 @@ pub struct Scanned {
     pub subpath: Option<String>,
     /// Changes whenever the drawn file does. Part of every preview's address,
     /// so a file edited or replaced on disk is never shown from a stale cache.
+    ///
+    /// It is the file's date and not also its size: a rating written into a
+    /// JPEG can make the file a little longer without changing the picture,
+    /// and its date is put back afterwards. Counting the size made every
+    /// photo rated in a sitting a stranger the next time its folder opened,
+    /// with its previews to make and its faces to find all over again.
     pub version: String,
     pub size: u64,
     /// When the owning file was last changed, in milliseconds. With its size,
@@ -38,10 +44,33 @@ pub struct Scanned {
     pub modified: u64,
 }
 
+/// Which of a folder's files are its photos.
+///
+/// A camera set to write both saves every frame twice, a RAW and a JPEG of
+/// the same name. Which of the two a photographer culls is theirs to say.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kinds {
+    /// Everything. A RAW and its JPEG are one photo, drawn from the JPEG:
+    /// marked together, moved together, binned together. Their marks are one
+    /// sidecar, named for the frame, so a rating given to the pair is on both.
+    #[default]
+    Both,
+    /// RAW files alone. A JPEG beside one is left exactly where it is.
+    Raw,
+    /// Everything that is not a RAW. A RAW beside one is left where it is.
+    Jpeg,
+}
+
 #[derive(Clone, Debug, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanResult {
     pub images: Vec<Scanned>,
+    /// Photos not listed because of which kinds were asked for: a JPEG with
+    /// no RAW when only RAWs are wanted, a RAW with no JPEG when only JPEGs
+    /// are. A frame shown through its other file is not one of these. Only
+    /// there to explain why a folder that looks full came up short or empty.
+    pub left_out: usize,
     /// Folders sitting directly inside the one opened. Only there to explain
     /// why a folder that looks full came up empty.
     pub subfolder_count: usize,
@@ -148,9 +177,26 @@ fn list(dir: &Path, recurse: bool, out: &mut Vec<Found>, subfolders: Option<&mut
 /// With `include_subfolders` it descends the whole tree, so a shoot split
 /// across a card's own folders — 100MSDCF, 101MSDCF — culls as one.
 pub fn scan_folder(folder: &Path, include_subfolders: bool) -> ScanResult {
+    scan_folder_of(folder, include_subfolders, Kinds::Both)
+}
+
+/// The same, listing only the kinds of file asked for.
+pub fn scan_folder_of(folder: &Path, include_subfolders: bool, kinds: Kinds) -> ScanResult {
     let mut found = Vec::new();
     let mut subfolder_count = 0;
     list(folder, include_subfolders, &mut found, Some(&mut subfolder_count));
+
+    // Only one kind wanted: the other is dropped here, before anything is
+    // paired, so that a frame is its own file and brings nothing with it.
+    let mut left_out = 0;
+    if kinds != Kinds::Both {
+        let is_raw = |f: &Found| RAW_EXTENSIONS.contains(&f.ext.as_str());
+        let frame = |f: &Found| (f.path.parent().map(Path::to_path_buf).unwrap_or_default(), f.path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_lowercase());
+        let wanted = |f: &Found| is_raw(f) == (kinds == Kinds::Raw);
+        let shown: HashSet<(PathBuf, String)> = found.iter().filter(|f| wanted(f)).map(frame).collect();
+        left_out = found.iter().filter(|f| !wanted(f) && !shown.contains(&frame(f))).map(frame).collect::<HashSet<_>>().len();
+        found.retain(wanted);
+    }
 
     // Pair only exact, case-insensitive base names **within one folder**:
     // IMG_1234.ARW + IMG_1234.JPG. The folder has to be part of the key.
@@ -206,7 +252,7 @@ pub fn scan_folder(folder: &Path, include_subfolders: bool) -> ScanResult {
             display: shown.path.clone(),
             name: name_of(&f.path),
             subpath,
-            version: format!("{:x}-{:x}", shown.modified, shown.size),
+            version: format!("{:x}", shown.modified),
             size: f.size,
             modified: f.modified as u64,
         });
@@ -222,7 +268,7 @@ pub fn scan_folder(folder: &Path, include_subfolders: bool) -> ScanResult {
             .then_with(|| natural_cmp(&a.name, &b.name))
     });
 
-    ScanResult { images, subfolder_count }
+    ScanResult { images, left_out, subfolder_count }
 }
 
 fn name_of(path: &Path) -> String {
@@ -301,6 +347,41 @@ mod tests {
         assert_eq!(names(&result), vec!["A7V00001.ARW", "A7V00002.ARW", "A7V00003.JPG"]);
         assert_eq!(result.images[0].display, dir.join("A7V00001.JPG"));
         assert_eq!(result.images[1].display, dir.join("A7V00002.ARW"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn asked_for_raws_alone_a_frame_is_its_raw_and_brings_no_jpeg() {
+        let dir = scratch("rawonly", &["A7V00001.ARW", "A7V00001.JPG", "A7V00002.ARW", "A7V00003.JPG", "logo.png"]);
+        let result = scan_folder_of(&dir, false, Kinds::Raw);
+
+        assert_eq!(names(&result), vec!["A7V00001.ARW", "A7V00002.ARW"]);
+        assert_eq!(result.images[0].display, dir.join("A7V00001.ARW"), "drawn from itself: the JPEG is not part of it");
+        assert_eq!(result.left_out, 2, "the JPEG with no RAW, and the logo");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn asked_for_jpegs_alone_the_raws_are_left_where_they_are() {
+        let dir = scratch("jpegonly", &["A7V00001.ARW", "A7V00001.JPG", "A7V00002.ARW", "A7V00003.JPG", "logo.png"]);
+        let result = scan_folder_of(&dir, false, Kinds::Jpeg);
+
+        assert_eq!(names(&result), vec!["A7V00001.JPG", "A7V00003.JPG", "logo.png"]);
+        assert!(result.images.iter().all(|i| i.display == i.path));
+        assert_eq!(result.left_out, 1, "the RAW with no JPEG; the other is shown through its JPEG");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_pair_keeps_one_sidecar_whichever_of_the_two_is_being_culled() {
+        // What makes a mark given to one of a pair a mark on both.
+        let dir = scratch("onesidecar", &["A7V00001.ARW", "A7V00001.JPG"]);
+        let owner = |kinds| scan_folder_of(&dir, false, kinds).images[0].path.clone();
+        let sidecar = crate::xmp::sidecar_path(&owner(Kinds::Both));
+        assert_eq!(sidecar, dir.join("A7V00001.xmp"));
+        assert_eq!(crate::xmp::sidecar_path(&owner(Kinds::Raw)), sidecar);
+        assert_eq!(crate::xmp::sidecar_path(&owner(Kinds::Jpeg)), sidecar);
+        assert_eq!(scan_folder_of(&dir, false, Kinds::Both).left_out, 0);
         std::fs::remove_dir_all(&dir).ok();
     }
 

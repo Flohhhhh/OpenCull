@@ -107,7 +107,8 @@ export interface AiResult {
 }
 
 /** An analysed photo with when it was taken, as it is sent to be compared. */
-export type RunFrame = AiResult & { time: number | null; burst: number | null };
+/** `upright`: taller than it is wide, the way up it is shown; null if its shape is not known. */
+export type RunFrame = AiResult & { time: number | null; burst: number | null; upright: boolean | null };
 
 /** A photo marked again as one frame of its burst, or of a pose shot again. */
 export interface Compared {
@@ -140,6 +141,12 @@ export interface Histogram {
   b: number[];
   luma: number[];
 }
+
+/**
+ * Which of a folder's files are its photos: a RAW and its JPEG together as
+ * one, the RAWs alone, or everything that is not a RAW.
+ */
+export type FileKinds = "both" | "raw" | "jpeg";
 
 export type ViewMode = "loupe" | "scene" | "grid";
 export type SortKey = "captureTime" | "filename" | "rating";

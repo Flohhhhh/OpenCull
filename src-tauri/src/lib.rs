@@ -9,6 +9,7 @@ pub mod burst;
 pub mod cache;
 pub mod commands;
 pub mod editors;
+pub mod embed;
 pub mod faces;
 pub mod ingest;
 pub mod pool;
@@ -105,7 +106,14 @@ pub fn run() {
                 })
                 .ok();
 
-            app.manage(Arc::new(App::new(Previews::new(cache), times::Times::new(times_dir), ai::store::Store::new(faces_dir))));
+            let state = Arc::new(App::new(Previews::new(cache), times::Times::new(times_dir), ai::store::Store::new(faces_dir)));
+            // A rating that could not be written into a JPEG is still in its
+            // sidecar, but other programs will not see it, and that is said.
+            let handle = app.handle().clone();
+            state.writer.on_failure(move |path, why| {
+                handle.emit("jpeg-not-written", (path.to_string_lossy().into_owned(), why.to_string())).ok();
+            });
+            app.manage(state);
             Ok(())
         })
         .register_asynchronous_uri_scheme_protocol("opencull", |ctx, request, responder| {
@@ -155,6 +163,7 @@ pub fn run() {
             commands::ingest_copy,
             commands::ingest_cancel,
             commands::ai_scan,
+            commands::ai_look_at,
             commands::ai_compare,
             commands::ai_stop,
             commands::ai_set_yield,

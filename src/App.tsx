@@ -63,6 +63,23 @@ export default function App() {
     };
   }, []);
 
+  // A rating that could not be written into a JPEG. Said once for each
+  // folder: on a card locked against writing it is true of every photo, and
+  // a warning for each would be a wall of them.
+  useEffect(() => {
+    let told: number | null = null;
+    return api.onJpegNotWritten((path, why) => {
+      const s = useStore.getState();
+      const folder = s.session?.id ?? -1;
+      if (told === folder) return;
+      told = folder;
+      s.set("notice", {
+        title: "A rating could not be written into the JPEG",
+        body: `${path.split(/[\\/]/).pop()}: ${why}.\n\nThe rating is still saved beside the photo, so OpenCull has it, but other programs will not see it on the JPEG. This is only said once for each folder. To stop writing into JPEGs altogether, turn it off in Settings, under Culling.`,
+      });
+    });
+  }, []);
+
   // Quitting is refused while photos are coming off a card. Say why, or it
   // looks as though the app has stopped listening.
   useEffect(

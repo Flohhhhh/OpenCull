@@ -4,7 +4,7 @@
 import { create } from "zustand";
 import { api } from "./api";
 import { load, save } from "./prefs";
-import type { AiFace, AiResult, Color, Compared, Flag, FlagFilter, Marks, MetaEvent, Photo, Rank, SortKey, ViewMode } from "./types";
+import type { AiFace, AiResult, Color, Compared, FileKinds, Flag, FlagFilter, Marks, MetaEvent, Photo, Rank, SortKey, ViewMode } from "./types";
 
 interface Session {
   id: number;
@@ -12,6 +12,9 @@ interface Session {
   name: string;
   includeSubfolders: boolean;
   subfolderCount: number;
+  /** Which kinds of file it was opened for, and how many photos that left out. */
+  fileKinds: FileKinds;
+  leftOut: number;
   /** The folder opened already in the order it was shot. */
   timed: boolean;
 }
@@ -19,7 +22,7 @@ interface Session {
 /** One undoable step: every photo it touched, before and after. */
 type Edit = { index: number; before: Marks; after: Marks }[];
 
-export type ZoomCommand = { kind: "toggle" | "in" | "out"; nonce: number };
+export type ZoomCommand = { kind: "toggle" | "centre" | "in" | "out"; nonce: number };
 
 interface State {
   platform: string;
@@ -64,6 +67,10 @@ interface State {
   /** A side panel's edge is being dragged, and the photo beside it changes size every frame. */
   panelResizing: boolean;
   includeSubfolders: boolean;
+  /** Which of a folder's files are shown as its photos. */
+  fileKinds: FileKinds;
+  /** Write a JPEG's marks into the file itself, as well as beside it. */
+  embedInJpeg: boolean;
   /** Move on to the next photo after marking one. Follows Caps Lock. */
   speedCull: boolean;
   /** The same, left on whatever Caps Lock is doing. */
@@ -207,6 +214,11 @@ export function groupOf(s: Pick<State, "photos" | "poses">, index: number): numb
   return pose !== undefined ? pose : (s.photos[index]?.group ?? null);
 }
 
+/** Whether a photo is taller than it is wide, the way up it is shown; null until its shape has been read. */
+export function uprightOf(photo: Photo): boolean | null {
+  return photo.fullWidth > 0 && photo.fullHeight > 0 ? photo.fullHeight > photo.fullWidth : null;
+}
+
 /**
  * Photos further apart than this are never compared: they cannot be the same
  * pose. The backend holds the same figure and does the deciding; this only
@@ -286,6 +298,8 @@ const PERSISTED = [
   "showFilterBar",
   "filmstripHeight",
   "includeSubfolders",
+  "fileKinds",
+  "embedInJpeg",
   "warmAhead",
   "speedCullAlways",
   "keepZoom",
@@ -372,7 +386,11 @@ export const useStore = create<Store>((set, get) => {
     }
     if (edit.length === 0) return;
 
-    void api.setMarks(edit.map((e) => ({ path: photos[e.index].path, ...e.after })));
+    // A JPEG keeps its marks inside itself, where other programs look for
+    // them: the photo's own file if it is one, and the JPEG it is drawn from
+    // if it is a RAW with one beside it.
+    const jpegs = (p: Photo) => (s.embedInJpeg ? [...new Set([p.path, p.display])].filter((file) => /\.jpe?g$/i.test(file)) : []);
+    void api.setMarks(edit.map((e) => ({ path: photos[e.index].path, into: jpegs(photos[e.index]), ...e.after })));
     set({
       photos,
       // A photo that no longer passes the filter leaves the view at once,
@@ -381,6 +399,19 @@ export const useStore = create<Store>((set, get) => {
       view: filtered(s.order, photos, s),
       ...(record ? { undoStack: [...s.undoStack.slice(-MAX_UNDO + 1), edit], redoStack: [] } : {}),
     });
+  }
+
+  /**
+   * Where undoing or redoing a step leaves the loupe: on the photo the step
+   * changed, so that what was just put back is what is being looked at. A
+   * step that changed many lands on the first of them as they are shown. It
+   * is gone to even if the filter hides it — it is what was asked about.
+   */
+  function backTo(edit: Edit): Partial<State> {
+    const { order, current } = get();
+    const touched = new Set(edit.map((e) => e.index));
+    const first = order.find((i) => touched.has(i));
+    return first === undefined || first === current ? {} : { current: first, anchor: first };
   }
 
   /** The photos a keyboard mark lands on: just the one in the loupe. */
@@ -479,7 +510,7 @@ export const useStore = create<Store>((set, get) => {
     const ready = [...new Set(touched.map((i) => of.get(i)).filter((at) => at !== undefined))].map((at) => list[at]).filter((run) => run.every((i) => ai[i] !== undefined));
     if (ready.length === 0) return;
     void api
-      .aiCompare(ready.map((run) => run.map((i) => ({ ...ai[i]!, time: photos[i].captureMs, burst: photos[i].group }))), smartGroups)
+      .aiCompare(ready.map((run) => run.map((i) => ({ ...ai[i]!, time: photos[i].captureMs, burst: photos[i].group, upright: uprightOf(photos[i]) }))), smartGroups)
       .then((marked) => {
         const now = get();
         // A folder since closed, or the setting changed while this was asked.
@@ -545,6 +576,8 @@ export const useStore = create<Store>((set, get) => {
     stripResizing: false,
     panelResizing: false,
     includeSubfolders: load("includeSubfolders", false),
+    fileKinds: load<FileKinds>("fileKinds", "both"),
+    embedInJpeg: load("embedInJpeg", true),
     speedCull: false,
     speedCullAlways: load("speedCullAlways", false),
     keepZoom: load("keepZoom", true),
@@ -599,9 +632,9 @@ export const useStore = create<Store>((set, get) => {
       const before = get();
       if (before.session) get().closeFolder();
 
-      const includeSubfolders = get().includeSubfolders;
+      const { includeSubfolders, fileKinds } = get();
       set({
-        session: { id: -1, folder: path, name: baseName(path), includeSubfolders, subfolderCount: 0, timed: false },
+        session: { id: -1, folder: path, name: baseName(path), includeSubfolders, subfolderCount: 0, fileKinds, leftOut: 0, timed: false },
         loading: true,
         openError: null,
         photos: [],
@@ -620,7 +653,7 @@ export const useStore = create<Store>((set, get) => {
 
       let reply;
       try {
-        reply = await api.openFolder(path, includeSubfolders);
+        reply = await api.openFolder(path, includeSubfolders, fileKinds);
       } catch (e) {
         set({ session: null, loading: false, openError: String(e) });
         return;
@@ -656,12 +689,16 @@ export const useStore = create<Store>((set, get) => {
 
       // Pick up where this folder was left.
       const remembered = load<string | null>(`position.${path}`, null);
-      const resume = remembered ? photos.findIndex((p) => p.path === remembered) : -1;
+      // Where this folder was left. By the frame, if not by the file: left
+      // on a RAW and opened for JPEGs alone, it is the same photo.
+      const frame = (path: string) => path.replace(/\.[^./\\]+$/, "").toLowerCase();
+      const exact = remembered ? photos.findIndex((p) => p.path === remembered) : -1;
+      const resume = exact >= 0 || !remembered ? exact : photos.findIndex((p) => frame(p.path) === frame(remembered));
       const current = photos.length === 0 ? -1 : resume >= 0 ? resume : order[0];
 
       const recents = [path, ...get().recents.filter((r) => r !== path)].slice(0, MAX_RECENTS);
       set({
-        session: { id: reply.session, folder: path, name: baseName(path), includeSubfolders, subfolderCount: reply.subfolderCount, timed: reply.timed },
+        session: { id: reply.session, folder: path, name: baseName(path), includeSubfolders, subfolderCount: reply.subfolderCount, fileKinds, leftOut: reply.leftOut, timed: reply.timed },
         loading: false,
         photos,
         order,
@@ -835,7 +872,7 @@ export const useStore = create<Store>((set, get) => {
       const edit = s.undoStack[s.undoStack.length - 1];
       if (!edit) return;
       applyMarks(edit.map((e) => ({ index: e.index, after: e.before })), false);
-      set({ undoStack: s.undoStack.slice(0, -1), redoStack: [...s.redoStack, edit] });
+      set({ undoStack: s.undoStack.slice(0, -1), redoStack: [...s.redoStack, edit], ...backTo(edit) });
     },
 
     redo() {
@@ -843,7 +880,7 @@ export const useStore = create<Store>((set, get) => {
       const edit = s.redoStack[s.redoStack.length - 1];
       if (!edit) return;
       applyMarks(edit.map((e) => ({ index: e.index, after: e.after })), false);
-      set({ redoStack: s.redoStack.slice(0, -1), undoStack: [...s.undoStack, edit] });
+      set({ redoStack: s.redoStack.slice(0, -1), undoStack: [...s.undoStack, edit], ...backTo(edit) });
     },
 
     setFlagFilter(flagFilter) {

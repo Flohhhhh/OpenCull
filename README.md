@@ -67,8 +67,12 @@ deciding what to keep. OpenCull is built to make that fast.
 * **Opens a shoot at once.** A folder of RAWs opens in a fraction of a second,
   straight from the previews the camera already wrote into each file. No
   import, no catalogue, nothing to wait for.
+* **RAW, JPEG or both.** Shoot both and each pair is culled as one photo.
+  Or choose to see only the RAWs, or only the JPEGs.
 * **Marks you can take anywhere.** Stars, flags and colour labels are written
-  as standard sidecar files that Lightroom, Capture One and the rest read.
+  as standard sidecar files that Lightroom, Capture One and the rest read. A
+  JPEG's stars and colour label are also written into the JPEG itself, which
+  is where those programs look for them.
 * **Looks at the faces for you.** It finds the faces in every photo and shows
   whose eyes are shut, who is looking away and how sharp each one is.
 * **Compares a person with themselves.** It follows each person through a
@@ -79,9 +83,9 @@ deciding what to keep. OpenCull is built to make that fast.
 * **Start to finish.** Copy photos off a card, cull them, and hand the keepers
   to your editing program.
 
-**Status: early.** It is used daily on a Mac. The Windows and Linux versions
-build and pass their tests, but nobody has used them for real work yet. If
-you do, reports are very welcome, good or bad.
+**Status: early.** It is used daily on a Mac, and has been tested and
+confirmed working on Windows and Linux. If something goes wrong on your
+system, reports are very welcome.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -163,6 +167,7 @@ through the shoot from the keyboard:
 | `P` `X` `U` | Pick, reject, clear the flag |
 | `1`–`5`, `0` | Star rating, and none |
 | `6` `7` `8` `9` `N` | Red, yellow, green, blue and purple labels |
+| `Space` | Zoom in to the middle of the photo, and back out |
 | `Z` | Zoom in to where you last looked, and back out |
 | `G` | Grid view |
 | `.` | Face panel |

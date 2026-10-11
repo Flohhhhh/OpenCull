@@ -36,7 +36,7 @@ fn main() {
     // between sittings split it as surely as sending them apart would.
     let mut order: Vec<usize> = (0..found.len()).filter(|&i| found[i].0.is_some()).collect();
     order.sort_by(|a, b| found[*a].0.partial_cmp(&found[*b].0).unwrap().then(a.cmp(b)));
-    let frames: Vec<series::Frame> = order.iter().map(|&i| series::Frame { record: &found[i].1, time: found[i].0, burst: groups[i] }).collect();
+    let frames: Vec<series::Frame> = order.iter().map(|&i| series::Frame { record: &found[i].1, time: found[i].0, burst: groups[i], upright: None }).collect();
     let marked = series::compare_run(&frames, true);
 
     let mut poses: std::collections::BTreeMap<usize, Vec<usize>> = Default::default();

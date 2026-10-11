@@ -1,7 +1,7 @@
 # Builds OpenCull for macOS, Windows and Linux, and runs its tests on each.
 #
 # On every change to main it proves the app still builds everywhere, and
-# keeps the installers with the run. On a version tag (v0.1.0) it also puts
+# keeps the installers with the run. On a version tag (v0.2.0) it also puts
 # them on a draft release, to be looked over and published by hand.
 name: Build
 

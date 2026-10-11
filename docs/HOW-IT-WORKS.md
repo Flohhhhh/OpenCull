@@ -77,13 +77,30 @@ should work, but no file of those kinds has been tried.
 
 ## What is here, and what is not
 
-Here: opening folders, with or without subfolders; RAW + JPEG pairing; the
+Here: opening folders, with or without subfolders; RAW + JPEG pairing, or
+either kind alone (a pair is one photo with one sidecar, so a mark given to
+it is on both files; shown alone, a RAW or a JPEG leaves the other where it
+is); the
 loupe with zoom and pan, and zooming to a box dragged out with Command held
 (Control on Windows and Linux); filmstrip, grid and scene views; stars, flags
 and colour labels, written as sidecars; filters and sorting; burst grouping by
 capture time; EXIF panel and histogram; undo; move to trash; copying and moving
 photos to another folder; Ship; rebindable shortcuts; recent folders; the Mac
 app's settings, less the ones that belong to features not here.
+
+A JPEG's marks are also written into the JPEG itself, in its XMP packet,
+because that is where Lightroom, Bridge and others keep a JPEG's rating and
+the only place they look for it; a sidecar is still written, so the app's own
+record does not depend on it. It is the one place the app writes into a
+photograph. Only the packet is touched, never the picture. Where the packet
+has room it is written over at the same length and nothing else in the file
+moves; where it has not, the file is written out afresh beside itself, every
+byte outside the packet checked against the original, and only then swapped
+in. MEASURED on 7 and 17 MB JPEGs: 6 to 10 ms in place, 14 ms written afresh,
+the decoded picture and the EXIF identical afterwards. The file's date is put
+back, so its previews stay good. Pick and reject flags are written the same
+way, though Lightroom keeps its own flags in its catalogue and reads none
+from a file. It can be turned off in Settings.
 
 Ingest copies photos off a card: it lists cards and outside drives, shows what
 is on them, and copies the chosen photos with their JPEGs and in-camera stars.
@@ -130,9 +147,10 @@ The same is done for a pose shot again. A group lined up and photographed
 five times, a press at a time, is five bursts by the clock and one pose to
 the photographer: frames taken within twenty seconds of one another with the
 same people in the same places are compared, and ranked, as one, and are
-one scene in Scene View and one group in the filmstrip. "Intelligent
-grouping" in Settings turns this off, leaving only the frames of one press
-grouped. A folder still being scanned starts out grouped by the clock and
+one scene in Scene View and one group in the filmstrip. An upright photo
+and one on its side are never grouped, however alike: turning the camera
+is making another picture. "Intelligent grouping" in Settings turns poses
+off, leaving only the frames of one press grouped. A folder still being scanned starts out grouped by the clock and
 settles into poses as the scan reaches them. In a test
 of 2,328 photos that is 512 poses holding 1,579 photos, the largest of 25
 frames, and 61 subjects caught blinking whose eyes had not been called shut;

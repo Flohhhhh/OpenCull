@@ -171,7 +171,7 @@ pub fn read(image: &Path, probe: Option<&Probe>) -> Marks {
     marks
 }
 
-fn fresh(marks: Marks) -> String {
+pub(crate) fn fresh(marks: Marks) -> String {
     let rating = if marks.rating > 0 { format!("\n   xmp:Rating=\"{}\"", marks.rating) } else { String::new() };
     let label = marks.color.label().map(|l| format!("\n   xmp:Label=\"{l}\"")).unwrap_or_default();
     let pick = match marks.flag {
@@ -197,8 +197,20 @@ fn fresh(marks: Marks) -> String {
 /// A sidecar written by Lightroom holds every develop setting for the photo.
 /// Rewriting the file from scratch to change a star rating would throw all of
 /// that away, so the existing text is edited in place.
-fn update(xml: &str, marks: Marks) -> String {
+pub(crate) fn update(xml: &str, marks: Marks) -> String {
     let mut out = xml.to_string();
+    // A value may only be written under a prefix the document has declared.
+    // One Lightroom wrote declares both of these; one from a camera, or from
+    // another program, may declare neither — and a prefix used without being
+    // declared is not XML, which costs a reader the whole document and not
+    // just the one value.
+    let declared = |out: &mut String, ns: &str, uri: &str| {
+        if !out.contains(&format!("xmlns:{ns}=")) {
+            if let Some(at) = out.find("<rdf:Description") {
+                out.insert_str(at + "<rdf:Description".len(), &format!("\n    xmlns:{ns}=\"{uri}\""));
+            }
+        }
+    };
 
     // The element form of each is removed first, so a value never ends up
     // stated twice in two forms that then disagree.
@@ -224,6 +236,7 @@ fn update(xml: &str, marks: Marks) -> String {
         match value {
             Some(v) => {
                 let replacement = format!(r#"{ns}:{name}="{v}""#);
+                declared(&mut out, ns, if ns == "xmp" { "http://ns.adobe.com/xap/1.0/" } else { "http://ns.adobe.com/camera-raw-settings/1.0/" });
                 if attribute.is_match(&out) {
                     out = attribute.replace_all(&out, regex::NoExpand(&replacement)).into_owned();
                 } else if let Some(at) = out.find("<rdf:Description") {
@@ -274,18 +287,37 @@ pub struct Writer {
     shared: Arc<(Mutex<WriterState>, Condvar)>,
 }
 
+/// Told when marks could not be written into a JPEG: the file, and why.
+type Failed = Arc<dyn Fn(&Path, &str) + Send + Sync>;
+
 #[derive(Default)]
 struct WriterState {
-    pending: HashMap<PathBuf, Marks>,
+    /// For each photo, its latest marks and the JPEGs they are to be written
+    /// into as well as beside.
+    pending: HashMap<PathBuf, (Marks, Vec<PathBuf>)>,
     writing: usize,
     started: bool,
+    failed: Option<Failed>,
 }
 
 impl Writer {
     pub fn enqueue(&self, image: PathBuf, marks: Marks) {
+        self.enqueue_with(image, marks, Vec::new());
+    }
+
+    /// Has `report` called whenever marks cannot be written into a JPEG.
+    /// The sidecar is written all the same, so nothing is lost; what is lost
+    /// is other programs seeing it, and that should not pass in silence.
+    pub fn on_failure(&self, report: impl Fn(&Path, &str) + Send + Sync + 'static) {
+        self.shared.0.lock().unwrap().failed = Some(Arc::new(report));
+    }
+
+    /// Queues marks to be written beside `image`, and into each of `into` —
+    /// the JPEGs of the photo, which keep their marks inside themselves.
+    pub fn enqueue_with(&self, image: PathBuf, marks: Marks, into: Vec<PathBuf>) {
         let (lock, wake) = &*self.shared;
         let mut state = lock.lock().unwrap();
-        state.pending.insert(image, marks);
+        state.pending.insert(image, (marks, into));
         if !state.started {
             state.started = true;
             let shared = self.shared.clone();
@@ -306,12 +338,20 @@ impl Writer {
                     state = wake.wait(state).unwrap();
                 }
                 let path = state.pending.keys().next().cloned().expect("not empty");
-                let marks = state.pending.remove(&path).expect("present");
+                let (marks, into) = state.pending.remove(&path).expect("present");
                 state.writing += 1;
-                (path, marks)
+                (path, marks, into, state.failed.clone())
             };
             if let Err(e) = write(&job.0, job.1) {
                 eprintln!("sidecar write failed for {}: {e}", job.0.display());
+            }
+            for jpeg in &job.2 {
+                if let Err(e) = crate::embed::write(jpeg, job.1) {
+                    eprintln!("could not write marks into {}: {e}", jpeg.display());
+                    if let Some(report) = &job.3 {
+                        report(jpeg, &e.to_string());
+                    }
+                }
             }
             lock.lock().unwrap().writing -= 1;
             wake.notify_all();
@@ -455,6 +495,44 @@ mod tests {
         }
         writer.flush();
         assert_eq!(read(&photo, None).rating, 5);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn marks_for_a_pair_go_beside_the_raw_and_into_its_jpeg() {
+        let dir = scratch("pair");
+        let (raw, jpeg) = (dir.join("A7V00007.ARW"), dir.join("A7V00007.JPG"));
+        std::fs::write(&jpeg, crate::raw::jpeg::testing::jpeg(0xC0, 8, 6000, 4000, &[])).unwrap();
+
+        let writer = Writer::default();
+        writer.enqueue_with(raw.clone(), Marks { rating: 4, ..Default::default() }, vec![jpeg.clone()]);
+        writer.flush();
+
+        assert_eq!(read(&raw, None).rating, 4, "beside the RAW, where a RAW's marks live");
+        let bytes = std::fs::read(&jpeg).unwrap();
+        let inside = crate::raw::jpeg::xmp_packet(&bytes.as_slice(), 0, bytes.len() as u64).expect("the JPEG now carries a packet");
+        assert_eq!(parse(&inside).rating, 4, "and inside the JPEG, where a JPEG's do");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_jpeg_that_cannot_be_written_into_is_reported_and_the_sidecar_is_written_anyway() {
+        let dir = scratch("refused");
+        let (raw, not_a_jpeg) = (dir.join("A7V00008.ARW"), dir.join("A7V00008.JPG"));
+        std::fs::write(&not_a_jpeg, b"not a photograph").unwrap();
+
+        let told = Arc::new(Mutex::new(Vec::new()));
+        let writer = Writer::default();
+        let heard = told.clone();
+        writer.on_failure(move |path, why| heard.lock().unwrap().push((path.to_path_buf(), why.to_string())));
+        writer.enqueue_with(raw.clone(), Marks { rating: 2, ..Default::default() }, vec![not_a_jpeg.clone()]);
+        writer.flush();
+
+        assert_eq!(read(&raw, None).rating, 2);
+        assert_eq!(std::fs::read(&not_a_jpeg).unwrap(), b"not a photograph", "left exactly as it was");
+        let told = told.lock().unwrap();
+        assert_eq!(told.len(), 1);
+        assert_eq!(told[0].0, not_a_jpeg);
         std::fs::remove_dir_all(&dir).ok();
     }
 }

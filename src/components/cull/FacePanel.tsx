@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Focus, ScanFace } from "lucide-react";
 
 import { api } from "@/lib/api";
-import { isHeld } from "@/lib/held";
+import { isFullHeld, isHeld, watchFull } from "@/lib/held";
 import { BLINK, useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import type { AiFace, Photo } from "@/lib/types";
@@ -21,6 +21,13 @@ interface Showing {
   /** The sharp rendering, once it has been decoded. */
   sharp: string | null;
 }
+
+/**
+ * How much more finely a cut must be drawn than the window-sized rendering
+ * holds before the full-size picture is brought in for it. Below this the
+ * eye cannot tell them apart, and the larger picture is so much more to draw.
+ */
+const WORTH_FULL = 1.15;
 
 const PAD = 12;
 const GAP = 8;
@@ -130,16 +137,34 @@ export function FacePanel() {
 
   const grid = showing && size.w > 0 ? layout(Math.max(1, showing.faces.length), size.w, size.h) : null;
 
+  // The faces of a group are small in the frame and large in the panel: cut
+  // from the window-sized rendering they are stretched to two and three
+  // times what it holds, and eyes this is here to judge go soft. The photo
+  // rested on has its full-size picture decoded and waiting for a zoom; the
+  // small faces are drawn from that too, once it is there. Nothing is
+  // fetched or decoded for this, nothing is drawn from it while moving from
+  // photo to photo, and a face the rendering already shows in full is left
+  // as it is.
+  const fullUrl = photo ? api.url("full", photo) : null;
+  const fullHeld = useSyncExternalStore(watchFull, () => fullUrl !== null && isFullHeld(fullUrl));
+  let sharpest: string | null = null;
+  if (fullHeld && grid && showing && photo && showing.photo.index === photo.index && showing.photo.display === photo.display && photo.fullWidth > 0) {
+    const holds = Math.min(1, (fitSize || 2400) / Math.max(photo.fullWidth, photo.fullHeight));
+    const wants = (region: Region, fill: number, closer: boolean) => cutOf(region, fill, closer, photo, grid.cellW, grid.cellH).scale * window.devicePixelRatio;
+    const most = Math.max(0, ...(showing.key ? [wants(showing.key, 1, true)] : []), ...showing.faces.map(({ face }) => wants(face, FILL, false)));
+    if (most > holds * WORTH_FULL) sharpest = fullUrl;
+  }
+
   return (
     <aside className="flex h-full min-h-0 w-full flex-col bg-panel pt-3.5">
       <div ref={area} className={cn("min-h-0 flex-1", grid?.scrolls ? "overflow-y-auto" : "overflow-hidden")}>
         {showing && grid ? (
           <div className="flex flex-wrap content-start" style={{ gap: GAP, padding: `0 ${PAD}px ${PAD}px` }}>
-            {showing.key && <KeyCell region={showing.key} photo={showing.photo} width={grid.cellW} height={grid.cellH} softSrc={showing.soft} sharpSrc={showing.sharp} />}
+            {showing.key && <KeyCell region={showing.key} photo={showing.photo} width={grid.cellW} height={grid.cellH} softSrc={showing.soft} sharpSrc={showing.sharp} fullSrc={sharpest} />}
             {showing.faces.map(({ face, eyes }, at) => (
               // Kept by place, not by face: the cell stays and its picture
               // changes, rather than every cell being built again per photo.
-              <FaceCell key={at} face={face} eyes={eyes} photo={showing.photo} width={grid.cellW} height={grid.cellH} softSrc={showing.soft} sharpSrc={showing.sharp} />
+              <FaceCell key={at} face={face} eyes={eyes} photo={showing.photo} width={grid.cellW} height={grid.cellH} softSrc={showing.soft} sharpSrc={showing.sharp} fullSrc={sharpest} />
             ))}
           </div>
         ) : (
@@ -163,7 +188,7 @@ export function FacePanel() {
  * shape that fits INSIDE the part — some of the part is lost off two sides,
  * and what is left is seen larger.
  */
-function Cut({ region, fill, closer = false, photo, width, height, softSrc, sharpSrc }: { region: Region; fill: number; closer?: boolean; photo: Photo; width: number; height: number; softSrc: string | null; sharpSrc: string | null }) {
+function cutOf(region: Region, fill: number, closer: boolean, photo: Photo, width: number, height: number) {
   // The shape of the photo is known from its details; until then, the usual.
   const [imgW, imgH] = photo.fullWidth > 0 ? [photo.fullWidth, photo.fullHeight] : [3, 2];
   const [fw, fh] = [region.w * imgW, region.h * imgH];
@@ -180,15 +205,24 @@ function Cut({ region, fill, closer = false, photo, width, height, softSrc, shar
   h *= shrink;
   const left = Math.min(Math.max((region.x + region.w / 2) * imgW - w / 2, 0), imgW - w);
   const top = Math.min(Math.max((region.y + region.h / 2) * imgH - h / 2, 0), imgH - h);
-  const scale = width / w;
+  // `scale` is how many points of the panel one pixel of the photo covers.
+  return { imgW, imgH, left, top, scale: width / w };
+}
+
+function Cut({ region, fill, closer = false, photo, width, height, softSrc, sharpSrc, fullSrc }: { region: Region; fill: number; closer?: boolean; photo: Photo; width: number; height: number; softSrc: string | null; sharpSrc: string | null; fullSrc: string | null }) {
+  const { imgW, imgH, left, top, scale } = cutOf(region, fill, closer, photo, width, height);
+  const style = { width: imgW * scale, height: imgH * scale, left: -left * scale, top: -top * scale };
 
   // Both are decoded before they are given here, so each is drawn in the
   // frame it appears: the soft one first, the sharp one over it.
   return (
     <>
-      {[softSrc, sharpSrc].map(
-        (src, layer) => src && <img key={layer} src={src} alt="" decoding="sync" draggable={false} className="absolute max-w-none" style={{ width: imgW * scale, height: imgH * scale, left: -left * scale, top: -top * scale }} />,
-      )}
+      {[softSrc, sharpSrc].map((src, layer) => src && <img key={layer} src={src} alt="" decoding="sync" draggable={false} className="absolute max-w-none" style={style} />)}
+      {/* The full-size picture, over both, for a cut the others cannot
+          show finely. It is decoded already; but should the view ever have
+          let that go, it is to decode it again out of the way and show the
+          rendering beneath meanwhile, never to hold everything up for it. */}
+      {fullSrc && <img key="full" src={fullSrc} alt="" decoding="async" draggable={false} className="absolute max-w-none" style={style} />}
     </>
   );
 }
@@ -197,7 +231,7 @@ function Cut({ region, fill, closer = false, photo, width, height, softSrc, shar
  * `eyes` is how open this person's eyes are as a share of their own best in
  * the burst, or null where there is nothing to compare them with.
  */
-function FaceCell({ face, eyes, photo, width, height, softSrc, sharpSrc }: { face: AiFace; eyes: number | null; photo: Photo; width: number; height: number; softSrc: string | null; sharpSrc: string | null }) {
+function FaceCell({ face, eyes, photo, width, height, softSrc, sharpSrc, fullSrc }: { face: AiFace; eyes: number | null; photo: Photo; width: number; height: number; softSrc: string | null; sharpSrc: string | null; fullSrc: string | null }) {
   return (
     <button
       type="button"
@@ -206,7 +240,7 @@ function FaceCell({ face, eyes, photo, width, height, softSrc, sharpSrc }: { fac
       className={cn("relative shrink-0 cursor-pointer overflow-hidden rounded-md bg-[#333]", !face.subject && "opacity-40")}
       style={{ width, height }}
     >
-      <Cut region={face} fill={FILL} photo={photo} width={width} height={height} softSrc={softSrc} sharpSrc={sharpSrc} />
+      <Cut region={face} fill={FILL} photo={photo} width={width} height={height} softSrc={softSrc} sharpSrc={sharpSrc} fullSrc={fullSrc} />
       <FaceBadge face={face} eyes={eyes} width={width} height={height} />
     </button>
   );
@@ -218,7 +252,7 @@ function FaceCell({ face, eyes, photo, width, height, softSrc, sharpSrc }: { fac
  * mark and its rank already come from this part of it, and a number here
  * would invite setting one photo's subject against another's.
  */
-function KeyCell({ region, photo, width, height, softSrc, sharpSrc }: { region: Region; photo: Photo; width: number; height: number; softSrc: string | null; sharpSrc: string | null }) {
+function KeyCell({ region, photo, width, height, softSrc, sharpSrc, fullSrc }: { region: Region; photo: Photo; width: number; height: number; softSrc: string | null; sharpSrc: string | null; fullSrc: string | null }) {
   const [hovering, setHovering] = useState(false);
   const k = Math.min(Math.max(Math.min(width, height) / 150, 0.62), 1);
   return (
@@ -229,7 +263,7 @@ function KeyCell({ region, photo, width, height, softSrc, sharpSrc }: { region: 
           loupe beside it; cut from wholly inside it, a table lost its sides
           and a ring filled the cell — too tight to see what it was a ring
           on. Half way between is the close look that still shows the thing. */}
-      <Cut region={region} fill={1} closer photo={photo} width={width} height={height} softSrc={softSrc} sharpSrc={sharpSrc} />
+      <Cut region={region} fill={1} closer photo={photo} width={width} height={height} softSrc={softSrc} sharpSrc={sharpSrc} fullSrc={fullSrc} />
       <span
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}

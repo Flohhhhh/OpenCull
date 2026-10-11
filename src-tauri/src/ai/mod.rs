@@ -8,6 +8,7 @@ pub mod focus;
 pub mod judge;
 pub mod key;
 pub mod onnx;
+pub mod queue;
 pub mod score;
 pub mod series;
 pub mod store;

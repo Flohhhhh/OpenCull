@@ -129,6 +129,7 @@ export function Loupe() {
 
 function Canvas({ photo }: { photo: Photo }) {
   const frame = useRef<HTMLDivElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState<Zoom>(FIT);
   const [marquee, setMarquee] = useState<Marquee | null>(null);
@@ -140,6 +141,8 @@ function Canvas({ photo }: { photo: Photo }) {
   const [drawnAt, setDrawnAt] = useState<number | null>(null);
   /** How long the move now under way takes, in milliseconds; 0 for at once. */
   const [glide, setGlide] = useState(0);
+  /** A zoom out that sets off once the picture has been drawn small: where to, and how long it takes. */
+  const [leaving, setLeaving] = useState<{ to: Zoom; ms: number } | null>(null);
   /** The picture is being dragged or scrolled about. */
   const [moving, setMoving] = useState(false);
   const rest = useRef<number | undefined>(undefined);
@@ -199,6 +202,7 @@ function Canvas({ photo }: { photo: Photo }) {
     window.clearTimeout(rest.current);
     setGlide(0);
     setDrawnAt(null);
+    setLeaving(null);
     setMoving(false);
   }
   shownBefore.current = shown;
@@ -207,6 +211,8 @@ function Canvas({ photo }: { photo: Photo }) {
   // go on seeing the zoom as it was when they were.
   const now = useRef(zoom);
   now.current = zoom;
+  const drawnNow = useRef(drawnAt);
+  drawnNow.current = drawnAt;
 
   /** `z`, with the picture kept within `slack` of covering the frame. */
   const within = (z: Zoom, slackX: number, slackY: number): Zoom => {
@@ -242,9 +248,46 @@ function Canvas({ photo }: { photo: Photo }) {
     setZoom(settled(z));
     sharpenAfter(ms + 40);
   };
+  /**
+   * Glides out to a smaller size.
+   *
+   * Not by shrinking the picture as it is drawn. Zoomed in, it is drawn many
+   * times the size of the window, and the view only ever paints the part of
+   * that which can be seen — so shrinking it shrank that part alone, a
+   * cropped rectangle closing in on the middle, with the rest of the photo
+   * appearing only once it had arrived. Instead the picture is first drawn
+   * at the size it is going to, stretched up to where it is now, and the
+   * stretch is then let go. All of it is on the sheet from the first frame.
+   */
+  const shrinkTo = (z: Zoom, ms: number) => {
+    const to = settled(z);
+    // Already drawn that small, part-way through a zoom in: turn it round
+    // from where it has got to.
+    if (drawnNow.current !== null && drawnNow.current <= to.scale + 0.001) return glideTo(to, ms);
+    window.clearTimeout(rest.current);
+    setGlide(0);
+    setDrawnAt(to.scale);
+    setLeaving({ to, ms });
+  };
+  // The second half of that, before anything is painted: the view is made to
+  // take in where the stretched picture starts from, which is what it then
+  // glides away from.
+  useLayoutEffect(() => {
+    if (!leaving) return;
+    if (sheet.current) void getComputedStyle(sheet.current).transform;
+    setLeaving(null);
+    setGlide(leaving.ms);
+    setZoom(leaving.to);
+    sharpenAfter(leaving.ms + 40);
+  }, [leaving]);
   /** Moves there at once, stretching what is drawn; redrawn sharp when the changes stop coming. */
   const stretchTo = (z: Zoom) => {
-    setDrawnAt((at) => at ?? now.current.scale);
+    // Growing, what is drawn is stretched. Shrinking, it is the fitted
+    // picture that is stretched, for the reason given above.
+    setDrawnAt((at) => {
+      const from = at ?? now.current.scale;
+      return z.scale < from - 0.001 ? 1 : from;
+    });
     setGlide(0);
     setZoom(settled(z));
     sharpenAfter(SHARPEN_MS);
@@ -274,7 +317,7 @@ function Canvas({ photo }: { photo: Photo }) {
     const scale = lastLevel > 1.01 ? level(lastLevel) : actual;
     glideTo(tight({ scale, x: -point.x * scale, y: -point.y * scale }), GLIDE.in);
   };
-  const backToFit = () => glideTo(FIT, GLIDE.out);
+  const backToFit = () => shrinkTo(FIT, GLIDE.out);
 
   /** Zooms so that the box dragged out fills the frame. */
   const zoomToBox = (m: Marquee) => {
@@ -303,6 +346,16 @@ function Canvas({ photo }: { photo: Photo }) {
     if (command.nonce === seen.current) return;
     seen.current = command.nonce;
     const z = now.current;
+    if (command.kind === "centre") {
+      // The middle of the photo and back, whatever was looked at before.
+      if (z.scale > 1.001) {
+        rememberLevel(z.scale);
+        backToFit();
+      } else {
+        zoomInOn({ x: 0, y: 0 });
+      }
+      return;
+    }
     if (command.kind === "toggle") {
       if (z.scale > 1.001) {
         // Remember where this was before letting go of it.
@@ -539,6 +592,7 @@ function Canvas({ photo }: { photo: Photo }) {
       <div ref={frame} onPointerDown={onPointerDown} className={cn("relative size-full touch-none overflow-hidden", zoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in")}>
         {box.w > 0 && (
           <div
+            ref={sheet}
             className={cn("absolute left-1/2 top-1/2", inMotion && "will-change-transform")}
             style={{
               width: laid.w,

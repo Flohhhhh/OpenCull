@@ -55,7 +55,7 @@ export const mock: Backend = {
   appInfo: () => later({ platform: "macos", version: "dev", cacheDir: "/tmp/opencull", openPath: null, selfTest: false }),
   // Untimed, so the slower path — filename order first, shooting order once
   // the metadata is in — is the one a browser tab exercises.
-  openFolder: () => later({ session: 1, images, subfolderCount: 2, times: images.map(() => null), timed: false, groups: null }, 150),
+  openFolder: () => later({ session: 1, images, subfolderCount: 2, leftOut: 0, times: images.map(() => null), timed: false, groups: null }, 150),
   closeFolder: () => later(undefined),
   loadMetadata: async (_session, onEvent) => {
     // Bursts of one to six frames, a few seconds apart.
@@ -156,6 +156,7 @@ export const mock: Backend = {
         }),
       ),
     ),
+  aiLookAt: () => later(undefined),
   aiStop: () => later(undefined),
   aiSetYield: () => later(undefined),
   aiCacheUsage: () => later([2_400_000, 14] as [number, number]),
@@ -190,6 +191,7 @@ export const mock: Backend = {
   },
   ingestCancel: () => later(undefined),
   onQuitRefused: () => () => {},
+  onJpegNotWritten: () => () => {},
   histogram: (path) => {
     const seed = path.length;
     const bell = (centre: number) => Array.from({ length: 256 }, (_, x) => Math.round(900 * Math.exp(-((x - centre) ** 2) / 2600)));

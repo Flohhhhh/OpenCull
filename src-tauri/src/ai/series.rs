@@ -17,6 +17,11 @@
 //! seconds of each other with the same people in the same places are one
 //! pose, and are compared as the frames of a burst are. This never changes
 //! what a burst is — it only decides who is set beside whom.
+//!
+//! An upright photo and one on its side are never the same pose, however
+//! alike they are: turning the camera is making another picture. The same
+//! people fill the same parts of both frames, so nothing else here would
+//! tell them apart.
 
 use serde::Serialize;
 
@@ -52,6 +57,9 @@ pub struct Frame<'a> {
     pub time: Option<f64>,
     /// Which press of the shutter it came from, if it shares one.
     pub burst: Option<u32>,
+    /// Taller than it is wide, the way up it is shown. `None` if its shape
+    /// is not known, and then it is not held against it.
+    pub upright: Option<bool>,
 }
 
 /// A photo, marked again as one frame of its burst or pose.
@@ -126,7 +134,9 @@ pub fn compare_run(frames: &[Frame], across_presses: bool) -> Vec<Compared> {
             let (a, b) = (&frames[at - 1], &frames[at]);
             let one_press = a.burst.is_some() && a.burst == b.burst;
             let soon = matches!((a.time, b.time), (Some(t0), Some(t1)) if (t1 - t0).abs() <= POSE_GAP_MS);
-            one_press || (across_presses && soon && same_pose(a.record, b.record))
+            // The camera turned between them — even, rarely, within a press.
+            let turned = matches!((a.upright, b.upright), (Some(a), Some(b)) if a != b);
+            !turned && (one_press || (across_presses && soon && same_pose(a.record, b.record)))
         };
         if !joined {
             let records: Vec<&Record> = frames[start..at].iter().map(|f| f.record).collect();
@@ -345,14 +355,35 @@ mod tests {
     }
 
     fn run(frames: &[(Record, f64, Option<u32>)]) -> Vec<Compared> {
-        compare_run(&frames.iter().map(|(record, time, burst)| Frame { record, time: Some(*time), burst: *burst }).collect::<Vec<_>>(), true)
+        compare_run(&frames.iter().map(|(record, time, burst)| Frame { record, time: Some(*time), burst: *burst, upright: None }).collect::<Vec<_>>(), true)
+    }
+
+    #[test]
+    fn an_upright_photo_and_one_on_its_side_are_never_the_same_pose() {
+        // The same two people in the same parts of the frame, seconds apart:
+        // one pose by everything else here. The camera was turned for the
+        // third and fourth, and turned back for the fifth.
+        let pair = || frame(vec![face(0.2, 0.30), face(0.6, 0.28)]);
+        let shot = |at: f64, upright: Option<bool>, burst: Option<u32>| (pair(), at, upright, burst);
+        let poses = |frames: &[(Record, f64, Option<bool>, Option<u32>)], across: bool| {
+            let frames: Vec<Frame> = frames.iter().map(|(record, time, upright, burst)| Frame { record, time: Some(*time), burst: *burst, upright: *upright }).collect();
+            compare_run(&frames, across).iter().map(|c| c.pose).collect::<Vec<_>>()
+        };
+        let wide = Some(false);
+        let tall = Some(true);
+        let frames = [shot(0.0, wide, None), shot(2_000.0, wide, None), shot(4_000.0, tall, None), shot(6_000.0, tall, None), shot(8_000.0, wide, None)];
+        assert_eq!(poses(&frames, true), [0, 0, 1, 1, 2]);
+        // A shape not known is not held against a photo.
+        assert_eq!(poses(&[shot(0.0, wide, None), shot(2_000.0, None, None), shot(4_000.0, tall, None)], true), [0, 0, 0]);
+        // Nor does one press of the shutter keep them together.
+        assert_eq!(poses(&[shot(0.0, wide, Some(3)), shot(200.0, tall, Some(3))], false), [0, 1]);
     }
 
     #[test]
     fn asked_not_to_look_across_presses_only_a_burst_is_a_pose() {
         let pair = || frame(vec![face(0.2, 0.30), face(0.6, 0.28)]);
         let frames = [(pair(), 0.0, Some(1)), (pair(), 200.0, Some(1)), (pair(), 3_000.0, None)];
-        let frames: Vec<Frame> = frames.iter().map(|(record, time, burst)| Frame { record, time: Some(*time), burst: *burst }).collect();
+        let frames: Vec<Frame> = frames.iter().map(|(record, time, burst)| Frame { record, time: Some(*time), burst: *burst, upright: None }).collect();
         assert_eq!(compare_run(&frames, false).iter().map(|c| c.pose).collect::<Vec<_>>(), [0, 0, 1]);
         assert_eq!(compare_run(&frames, true).iter().map(|c| c.pose).collect::<Vec<_>>(), [0, 0, 0]);
     }

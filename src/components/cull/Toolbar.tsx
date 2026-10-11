@@ -77,6 +77,7 @@ const SORTS: { key: SortKey; title: string; up: string; down: string }[] = [
  */
 export function Toolbar() {
   const name = useStore((s) => s.session?.name ?? "");
+  const kinds = useStore((s) => s.session?.fileKinds ?? "both");
   const platform = useStore((s) => s.platform);
   const viewMode = useStore((s) => s.viewMode);
   const gridColumns = useStore((s) => s.gridColumns);
@@ -99,6 +100,11 @@ export function Toolbar() {
       <span data-tauri-drag-region className="flex min-w-0 max-w-[210px] shrink items-center gap-1.5 text-[13px] font-medium text-[#bfbfbf]" title={name}>
         <Folder className="size-3.5 shrink-0 text-[#808080]" />
         <span className="truncate">{name}</span>
+        {kinds !== "both" && (
+          <span className="shrink-0 rounded bg-white/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-[#a6a6a6]" title={`Showing only ${kinds === "raw" ? "RAW files" : "JPEGs"}. Change it in Settings, under Culling.`}>
+            {kinds === "raw" ? "RAW only" : "JPEG only"}
+          </span>
+        )}
       </span>
       <Status />
 

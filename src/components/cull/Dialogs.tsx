@@ -235,7 +235,7 @@ function SettingsBody({ tab, onTab }: { tab: SettingsTab; onTab: (tab: SettingsT
     }
   };
 
-  const toggle = (key: "speedCullAlways" | "showRatingBar" | "keepZoom" | "instantZoom" | "rgbHistogram" | "warmAhead" | "aiEnabled" | "showBackgroundFaces" | "aiPause" | "smartGroups") => (
+  const toggle = (key: "speedCullAlways" | "showRatingBar" | "keepZoom" | "instantZoom" | "rgbHistogram" | "warmAhead" | "aiEnabled" | "showBackgroundFaces" | "aiPause" | "smartGroups" | "embedInJpeg") => (
     <Switch checked={s[key]} onCheckedChange={(on) => set(key, on)} />
   );
   const boxKey = isMac ? "⌘ Command" : "Ctrl";
@@ -268,6 +268,40 @@ function SettingsBody({ tab, onTab }: { tab: SettingsTab; onTab: (tab: SettingsT
             title="RGB histogram"
             detail="Draws red, green and blue overlapping. Turn off for a single white curve of brightness."
             control={toggle("rgbHistogram")}
+          />
+          <Setting
+            title="Files to cull"
+            detail="For a camera that saves every frame as both a RAW and a JPEG. RAW + JPEG shows each pair as one photo: one rating covers both, and both are moved, copied or binned together. RAW or JPEG shows only that kind and leaves the other files where they are. The folder on screen reloads when you change this."
+            control={
+              <div className="flex rounded-md bg-white/[0.06] p-0.5">
+                {(
+                  [
+                    ["both", "RAW + JPEG"],
+                    ["raw", "RAW"],
+                    ["jpeg", "JPEG"],
+                  ] as const
+                ).map(([kinds, label]) => (
+                  <button
+                    key={kinds}
+                    type="button"
+                    onClick={() => {
+                      if (s.fileKinds === kinds) return;
+                      set("fileKinds", kinds);
+                      // The folder on screen was listed under the old setting.
+                      useStore.getState().reloadForSubfolders();
+                    }}
+                    className={cn("whitespace-nowrap rounded px-2.5 py-1 text-xs font-medium", s.fileKinds === kinds ? "bg-white/[0.14] text-white" : "text-[#8c8c8c] hover:text-white")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            }
+          />
+          <Setting
+            title="Write ratings into JPEGs"
+            detail="Stores a JPEG's stars and colour label inside the file itself as well as beside it, which is where Lightroom, Bridge and others look. Only the file's information is changed, never the picture. Turn off to leave JPEG files exactly as they are."
+            control={toggle("embedInJpeg")}
           />
           <Setting
             title="Include subfolders"

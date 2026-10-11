@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -62,6 +62,9 @@ pub struct App {
     ai_scan: AtomicU64,
     /// Whether analysis stands aside while the photographer is moving about.
     ai_yields: AtomicBool,
+    /// The photos being looked at now, nearest first: what the scan
+    /// analyses before carrying on with the rest of the folder.
+    ai_front: Mutex<Vec<usize>>,
 }
 
 impl App {
@@ -84,6 +87,7 @@ impl App {
             faces,
             ai_scan: AtomicU64::new(0),
             ai_yields: AtomicBool::new(true),
+            ai_front: Default::default(),
         }
     }
 }
@@ -188,6 +192,8 @@ pub struct FolderReply {
     session: u64,
     images: Vec<Scanned>,
     subfolder_count: usize,
+    /// Photos not listed because of which kinds of file were asked for.
+    left_out: usize,
     /// When each photo was taken, where that is known yet.
     times: Vec<Option<f64>>,
     /// Every photo's time is in `times`, so the folder can be shown in the
@@ -217,7 +223,8 @@ const TIME_BUDGET: Duration = Duration::from_millis(1500);
 /// on screen before either — but the capture times are read here, by the
 /// short route, because the order of the folder depends on them.
 #[tauri::command]
-pub async fn open_folder(app: AppState<'_>, path: String, include_subfolders: bool) -> Result<FolderReply, String> {
+pub async fn open_folder(app: AppState<'_>, path: String, include_subfolders: bool, kinds: Option<scan::Kinds>) -> Result<FolderReply, String> {
+    let kinds = kinds.unwrap_or_default();
     let folder = PathBuf::from(&path);
     if !folder.is_dir() {
         return Err(format!("{path} is not a folder"));
@@ -226,7 +233,7 @@ pub async fn open_folder(app: AppState<'_>, path: String, include_subfolders: bo
     let scanned_folder = folder.clone();
     let (result, read) = tauri::async_runtime::spawn_blocking(move || {
         let folder = scanned_folder;
-        let result = scan::scan_folder(&folder, include_subfolders);
+        let result = scan::scan_folder_of(&folder, include_subfolders, kinds);
         let known = shared.times.load(&folder);
         let deadline = Instant::now() + TIME_BUDGET;
 
@@ -261,7 +268,7 @@ pub async fn open_folder(app: AppState<'_>, path: String, include_subfolders: bo
         session,
         Arc::new(Session { folder, images: result.images.clone(), timed, closed: AtomicBool::new(false) }),
     );
-    Ok(FolderReply { session, images: result.images, subfolder_count: result.subfolder_count, times, timed, groups })
+    Ok(FolderReply { session, images: result.images, subfolder_count: result.subfolder_count, left_out: result.left_out, times, timed, groups })
 }
 
 #[tauri::command]
@@ -448,6 +455,10 @@ pub fn warm_remaining(app: AppState) -> usize {
 #[derive(Deserialize)]
 pub struct MarkChange {
     path: String,
+    /// The photo's JPEGs, which are to hold the marks inside themselves as
+    /// well. None, for a photo with no JPEG or when that is turned off.
+    #[serde(default)]
+    into: Vec<String>,
     #[serde(flatten)]
     marks: Marks,
 }
@@ -457,7 +468,7 @@ pub struct MarkChange {
 #[tauri::command]
 pub fn set_marks(app: AppState, changes: Vec<MarkChange>) {
     for change in changes {
-        app.writer.enqueue(PathBuf::from(change.path), change.marks);
+        app.writer.enqueue_with(PathBuf::from(change.path), change.marks, change.into.into_iter().map(PathBuf::from).collect());
     }
 }
 
@@ -627,6 +638,9 @@ pub async fn ai_scan(app: AppState<'_>, session: u64, order: Vec<usize>, events:
     };
     let app = app.inner().clone();
     let mine = app.ai_scan.fetch_add(1, Ordering::SeqCst) + 1;
+    // The order given starts from the photo on screen; whatever an earlier
+    // scan was told to look at first has nothing to say about this one.
+    app.ai_front.lock().unwrap().clear();
 
     tauri::async_runtime::spawn_blocking(move || {
         let wanted = || !session.closed.load(Ordering::SeqCst) && app.ai_scan.load(Ordering::SeqCst) == mine;
@@ -652,7 +666,7 @@ pub async fn ai_scan(app: AppState<'_>, session: u64, order: Vec<usize>, events:
         // few enough that the rest of the machine does not feel it.
         let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
         let workers = (cores / 2).clamp(1, 6).min(todo.len().max(1));
-        let next = AtomicUsize::new(0);
+        let queue = ai::queue::Queue::new(todo);
         let (tx, rx) = std::sync::mpsc::channel::<Analysed>();
         std::thread::scope(|scope| {
             for _ in 0..workers {
@@ -667,7 +681,9 @@ pub async fn ai_scan(app: AppState<'_>, session: u64, order: Vec<usize>, events:
                         if !wanted() {
                             return;
                         }
-                        let Some(&index) = todo.get(next.fetch_add(1, Ordering::SeqCst)) else { return };
+                        // What is being looked at now, then the rest.
+                        let front = app.ai_front.lock().unwrap().clone();
+                        let Some(index) = queue.take(&front) else { return };
                         let image = &session.images[index];
                         // A photo that cannot be analysed is remembered as
                         // having no faces, so it is not tried on every open.
@@ -709,7 +725,7 @@ pub async fn ai_scan(app: AppState<'_>, session: u64, order: Vec<usize>, events:
                 app.faces.save(&session.folder, &known.lock().unwrap());
             }
         });
-        events.send(AiEvent::Done { finished: next.load(Ordering::SeqCst) >= todo.len() && wanted() }).ok();
+        events.send(AiEvent::Done { finished: queue.exhausted() && wanted() }).ok();
     })
     .await
     .map_err(|e| e.to_string())
@@ -723,6 +739,8 @@ pub struct RunFrame {
     record: ai::store::Record,
     time: Option<f64>,
     burst: Option<u32>,
+    #[serde(default)]
+    upright: Option<bool>,
 }
 
 /// Marks the frames of each pose against one another: who blinked in which.
@@ -731,8 +749,15 @@ pub struct RunFrame {
 #[tauri::command]
 pub fn ai_compare(runs: Vec<Vec<RunFrame>>, poses: bool) -> Vec<Vec<ai::series::Compared>> {
     runs.iter()
-        .map(|run| ai::series::compare_run(&run.iter().map(|f| ai::series::Frame { record: &f.record, time: f.time, burst: f.burst }).collect::<Vec<_>>(), poses))
+        .map(|run| ai::series::compare_run(&run.iter().map(|f| ai::series::Frame { record: &f.record, time: f.time, burst: f.burst, upright: f.upright }).collect::<Vec<_>>(), poses))
         .collect()
+}
+
+/// Tells the scan now running which photos are being looked at, nearest
+/// first, so that it analyses those before the rest of the folder.
+#[tauri::command]
+pub fn ai_look_at(app: AppState, order: Vec<usize>) {
+    *app.ai_front.lock().unwrap() = order;
 }
 
 /// Stops the face scan now running.
