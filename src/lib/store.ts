@@ -55,6 +55,8 @@ interface State {
   viewMode: ViewMode;
   gridColumns: number;
   showExif: boolean;
+  /** How wide the EXIF panel is, in pixels. */
+  exifPanelWidth: number;
   showFilmstrip: boolean;
   showInfo: boolean;
   showRatingBar: boolean;
@@ -62,6 +64,8 @@ interface State {
   filmstripHeight: number;
   /** The strip's edge is being dragged, and its height is changing every frame. */
   stripResizing: boolean;
+  /** A side panel's edge is being dragged, and the photo beside it changes size every frame. */
+  panelResizing: boolean;
   includeSubfolders: boolean;
   /** Which of a folder's files are shown as its photos. */
   fileKinds: FileKinds;
@@ -120,6 +124,8 @@ interface State {
   aiPause: boolean;
   /** The panel of faces beside the photo. */
   showFaces: boolean;
+  /** How wide the face panel is, in pixels. */
+  facePanelWidth: number;
   /** A face to zoom the loupe to; numbered so the same one can be asked for twice. */
   faceZoom: { x: number; y: number; nonce: number } | null;
 
@@ -285,6 +291,7 @@ const PERSISTED = [
   "sortAscending",
   "gridColumns",
   "showExif",
+  "exifPanelWidth",
   "showFilmstrip",
   "showInfo",
   "showRatingBar",
@@ -304,6 +311,7 @@ const PERSISTED = [
   "aiPause",
   "smartGroups",
   "showFaces",
+  "facePanelWidth",
   "recents",
 ] as const satisfies readonly (keyof State)[];
 
@@ -559,12 +567,14 @@ export const useStore = create<Store>((set, get) => {
     viewMode: "loupe",
     gridColumns: load("gridColumns", 4),
     showExif: load("showExif", false),
+    exifPanelWidth: load("exifPanelWidth", 250),
     showFilmstrip: load("showFilmstrip", true),
     showInfo: load("showInfo", false),
     showRatingBar: load("showRatingBar", true),
     showFilterBar: load("showFilterBar", false),
     filmstripHeight: load("filmstripHeight", 120),
     stripResizing: false,
+    panelResizing: false,
     includeSubfolders: load("includeSubfolders", false),
     fileKinds: load<FileKinds>("fileKinds", "both"),
     embedInJpeg: load("embedInJpeg", true),
@@ -590,6 +600,7 @@ export const useStore = create<Store>((set, get) => {
     showBackgroundFaces: load("showBackgroundFaces", false),
     aiPause: load("aiPause", true),
     showFaces: load("showFaces", true),
+    facePanelWidth: load("facePanelWidth", 340),
     faceZoom: null,
 
     shortcutsOpen: false,

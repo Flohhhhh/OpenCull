@@ -12,12 +12,20 @@ import { Loupe } from "./Loupe";
 import { SceneView } from "./SceneView";
 import { Toolbar } from "./Toolbar";
 
+const PANEL_LIMITS = {
+  exifPanelWidth: { min: 0.125, max: 0.25 },
+  facePanelWidth: { min: 0.125, max: 0.4 },
+} as const;
+type PanelWidth = keyof typeof PANEL_LIMITS;
+
 /** The main workspace: toolbar, photo, filmstrip. */
 export function CullingView() {
   const viewMode = useStore((s) => s.viewMode);
   const showExif = useStore((s) => s.showExif);
   const showFilmstrip = useStore((s) => s.showFilmstrip);
   const showFaces = useStore((s) => s.showFaces);
+  const exifPanelWidth = useStore((s) => s.exifPanelWidth);
+  const facePanelWidth = useStore((s) => s.facePanelWidth);
   const empty = useStore((s) => !s.loading && s.photos.length === 0);
   useWarmAhead();
   useFaceScan();
@@ -34,9 +42,27 @@ export function CullingView() {
           </div>
         ) : (
           <>
-            {showExif && <ExifPanel />}
-            <div className="min-w-0 flex-1">{viewMode === "scene" ? <SceneView /> : <Loupe />}</div>
-            {showFaces && <FacePanel />}
+            {showExif && (
+              <div
+                className="h-full min-h-0 shrink-0 overflow-hidden bg-panel"
+                style={{ width: exifPanelWidth }}
+              >
+                <ExifPanel />
+              </div>
+            )}
+            {showExif && <PanelHandle panel="exifPanelWidth" direction={1} />}
+            <div className="min-w-0 flex-1 overflow-hidden">
+              {viewMode === "scene" ? <SceneView /> : <Loupe />}
+            </div>
+            {showFaces && <PanelHandle panel="facePanelWidth" direction={-1} />}
+            {showFaces && (
+              <div
+                className="h-full min-h-0 shrink-0 overflow-hidden bg-panel"
+                style={{ width: facePanelWidth }}
+              >
+                <FacePanel />
+              </div>
+            )}
           </>
         )}
       </div>
@@ -46,6 +72,58 @@ export function CullingView() {
         </div>
       )}
     </div>
+  );
+}
+
+function PanelHandle({
+  panel,
+  direction,
+}: {
+  panel: PanelWidth;
+  direction: 1 | -1;
+}) {
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const startX = e.clientX;
+    const startWidth = useStore.getState()[panel];
+    const containerWidth =
+      target.parentElement?.clientWidth ?? window.innerWidth;
+    target.setPointerCapture(e.pointerId);
+    useStore.getState().set("panelResizing", true);
+
+    const onMove = (ev: globalThis.PointerEvent) => {
+      const { min, max } = PANEL_LIMITS[panel];
+      const width = Math.round(
+        Math.max(
+          min * containerWidth,
+          Math.min(
+            max * containerWidth,
+            startWidth + direction * (ev.clientX - startX)
+          )
+        )
+      );
+      if (width !== useStore.getState()[panel])
+        useStore.getState().set(panel, width);
+    };
+    const onUp = () => {
+      target.removeEventListener("pointermove", onMove);
+      target.removeEventListener("pointerup", onUp);
+      target.removeEventListener("pointercancel", onUp);
+      target.removeEventListener("lostpointercapture", onUp);
+      useStore.getState().set("panelResizing", false);
+    };
+    target.addEventListener("pointermove", onMove);
+    target.addEventListener("pointerup", onUp);
+    target.addEventListener("pointercancel", onUp);
+    target.addEventListener("lostpointercapture", onUp);
+  };
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      onPointerDown={onPointerDown}
+      className="group relative w-1 shrink-0 cursor-col-resize bg-[#333] hover:bg-[#4d8cff] focus:bg-[#4d8cff]"
+    />
   );
 }
 
