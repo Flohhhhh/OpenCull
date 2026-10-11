@@ -88,6 +88,7 @@ function PanelHandle({
   direction: 1 | -1;
 }) {
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
     const target = e.currentTarget;
     const startX = e.clientX;
     const containerWidth =
@@ -130,7 +131,7 @@ function PanelHandle({
       role="separator"
       aria-orientation="vertical"
       onPointerDown={onPointerDown}
-      className="group relative w-1 shrink-0 cursor-col-resize bg-[#333] hover:bg-[#4d8cff] focus:bg-[#4d8cff]"
+      className="group relative w-1 shrink-0 cursor-col-resize bg-[#333] hover:bg-[#4d8cff]"
     />
   );
 }
