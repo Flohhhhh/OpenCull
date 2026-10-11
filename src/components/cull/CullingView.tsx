@@ -117,29 +117,10 @@ function PanelHandle({
     target.addEventListener("pointercancel", onUp);
     target.addEventListener("lostpointercapture", onUp);
   };
-  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault();
-    const { min, max } = PANEL_LIMITS[panel];
-    const containerWidth =
-      e.currentTarget.parentElement?.clientWidth ?? window.innerWidth;
-    const width =
-      useStore.getState()[panel] +
-      direction * (e.key === "ArrowRight" ? 10 : -10);
-    useStore
-      .getState()
-      .set(
-        panel,
-        Math.max(min * containerWidth, Math.min(max * containerWidth, width))
-      );
-  };
-
   return (
     <div
       role="separator"
-      tabIndex={0}
       aria-orientation="vertical"
-      onKeyDown={onKeyDown}
       onPointerDown={onPointerDown}
       className="group relative w-1 shrink-0 cursor-col-resize bg-[#333] hover:bg-[#4d8cff] focus:bg-[#4d8cff]"
     />
